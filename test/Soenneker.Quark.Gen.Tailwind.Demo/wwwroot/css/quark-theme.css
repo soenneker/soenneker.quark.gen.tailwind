@@ -1,0 +1,58 @@
+a {
+  color: #2563ba;
+  text-decoration: none;
+}
+.q-button {
+  padding: 0.5rem 1rem;
+  color: #ffffff;
+  background-color: #2563eb;
+  border-radius: 0.5rem;
+}
+.q-card {
+  background-color: #ffffff;
+  border-radius: 0.75rem;
+}
+
+:root {
+  --bs-gray-100: #f3f4f6;
+  --bs-gray-200: #e5e7eb;
+  --bs-gray-300: #d1d5db;
+  --bs-gray-400: #9ca3af;
+  --bs-gray-500: #6b7280;
+  --bs-gray-600: #4b5563;
+  --bs-gray-700: #374151;
+  --bs-gray-800: #1f2937;
+  --bs-gray-900: #111827;
+  --bs-primary: #2563eb;
+  --bs-secondary: #7c3aed;
+  --bs-success: #059669;
+  --bs-info: #0891b2;
+  --bs-warning: #ea580c;
+  --bs-danger: #dc2626;
+  --bs-light: #f9fafb;
+  --bs-dark: #1f2937;
+  --bs-primary-rgb: 37, 99, 235;
+  --bs-secondary-rgb: 124, 58, 237;
+  --bs-success-rgb: 5, 150, 105;
+  --bs-info-rgb: 8, 145, 178;
+  --bs-warning-rgb: 234, 88, 12;
+  --bs-danger-rgb: 220, 38, 38;
+  --bs-primary-text-emphasis: #1e40af;
+  --bs-secondary-text-emphasis: #5b21b6;
+  --bs-success-text-emphasis: #047857;
+  --bs-info-text-emphasis: #0e7490;
+  --bs-warning-text-emphasis: #c2410c;
+  --bs-danger-text-emphasis: #b91c1c;
+  --bs-primary-bg-subtle: #dbeafe;
+  --bs-secondary-bg-subtle: #ede9fe;
+  --bs-success-bg-subtle: #d1fae5;
+  --bs-info-bg-subtle: #cffafe;
+  --bs-warning-bg-subtle: #fed7aa;
+  --bs-danger-bg-subtle: #fee2e2;
+  --bs-primary-border-subtle: #93c5fd;
+  --bs-secondary-border-subtle: #c4b5fd;
+  --bs-success-border-subtle: #6ee7b7;
+  --bs-info-border-subtle: #67e8f9;
+  --bs-warning-border-subtle: #fdba74;
+  --bs-danger-border-subtle: #fca5a5;
+}

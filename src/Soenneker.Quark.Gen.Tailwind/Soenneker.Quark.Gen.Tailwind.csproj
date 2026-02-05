@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <Platforms>AnyCPU</Platforms>
+        <NoWarn>$(NoWarn);1591;</NoWarn>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <DevelopmentDependency>true</DevelopmentDependency>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <Description>Provides source generation for Quark and Tailwind CLI</Description>
+        <Version Condition="'$(BUILD_VERSION)' == ''">4.0.0</Version>
+        <Version Condition="'$(BUILD_VERSION)' != ''">$(BUILD_VERSION)</Version>
+        <AssemblyName>Soenneker.Quark.Gen.Tailwind</AssemblyName>
+        <PackageId>Soenneker.Quark.Gen.Tailwind</PackageId>
+        <PackageTags>quark gen tailwind cli source generator generation tailwindgenerator externalgenerator csharp dotnet c# .net</PackageTags>
+        <Copyright>Copyright © 2026 Jake Soenneker</Copyright>
+        <Authors>Jake Soenneker</Authors>
+        <Company>https://soenneker.com</Company>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <IsPackable>true</IsPackable>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/soenneker/soenneker.quark.gen.tailwind</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/soenneker/soenneker.quark.gen.tailwind</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <RepositoryBranch>main</RepositoryBranch>
+        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageIcon>icon.png</PackageIcon>
+        <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+        <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+        <None Include="..\..\icon.png" Pack="true" PackagePath="\" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="Soenneker.Quark.Gen.Tailwind.targets" Pack="true" PackagePath="build\" />
+        <None Include="Soenneker.Quark.Gen.Tailwind.targets" Pack="true" PackagePath="buildTransitive\" />
+
+        <None Include="..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\**\*.*"
+              Pack="true" PackagePath="buildTransitive\%(RecursiveDir)" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="$(TargetPath)" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+        <None Include="$(TargetDir)$(AssemblyName).pdb" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" PrivateAssets="all" />
+    </ItemGroup>
+
+    <Target Name="BuildBuildTasksTool"
+            BeforeTargets="Pack"
+            Condition="'$(IsPackable)' == 'true'">
+
+        <MSBuild Projects="..\Soenneker.Quark.Gen.Tailwind.BuildTasks\Soenneker.Quark.Gen.Tailwind.BuildTasks.csproj"
+                 Targets="Build"
+                 Properties="Configuration=$(Configuration);NoBuild=false"
+                 BuildInParallel="true" />
+
+        <Error Condition="!Exists('..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\Soenneker.Quark.Gen.Tailwind.BuildTasks.dll')"
+               Text="BuildTasks output missing. Aborting pack to avoid publishing a broken package." />
+    </Target>
+</Project>

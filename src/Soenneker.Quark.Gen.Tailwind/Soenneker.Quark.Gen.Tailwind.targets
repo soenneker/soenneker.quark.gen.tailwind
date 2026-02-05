@@ -1,0 +1,33 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+    <Target Name="TailwindGeneratorBuild_Imported" BeforeTargets="Build">
+        <Message Importance="high" Text="Soenneker.Quark.Gen.Tailwind targets imported from: $(MSBuildThisFileFullPath)" />
+    </Target>
+
+    <PropertyGroup>
+        <_BuildTasksDir Condition="Exists('$(MSBuildThisFileDirectory)Soenneker.Quark.Gen.Tailwind.BuildTasks.dll')">$(MSBuildThisFileDirectory)</_BuildTasksDir>
+        <_BuildTasksDir Condition="'$(_BuildTasksDir)'=='' and Exists('$(MSBuildThisFileDirectory)..\buildTransitive\Soenneker.Quark.Gen.Tailwind.BuildTasks.dll')">$(MSBuildThisFileDirectory)..\buildTransitive\</_BuildTasksDir>
+        <BuildTasksDllPath Condition="'$(BuildTasksDllPath)'=='' and '$(_BuildTasksDir)'!=''">$(_BuildTasksDir)Soenneker.Quark.Gen.Tailwind.BuildTasks.dll</BuildTasksDllPath>
+        <TailwindGeneratorBuildEnabled Condition="'$(TailwindGeneratorBuildEnabled)'==''">true</TailwindGeneratorBuildEnabled>
+    </PropertyGroup>
+
+    <Target Name="RunTailwindGeneratorBuildTasks"
+            AfterTargets="Build"
+            Condition="'$(DesignTimeBuild)'!='true' and '$(IsCrossTargetingBuild)'!='true' and '$(TailwindGeneratorBuildEnabled)'=='true'">
+
+        <Message Importance="high" Text="Running Soenneker.Quark.Gen.Tailwind BuildTasks: targetPath=$(TargetPath) projectDir=$(ProjectDir)" />
+        <Error Condition="'$(BuildTasksDllPath)'==''"
+               Text="BuildTasksDllPath was not resolved. MSBuildThisFileDirectory=$(MSBuildThisFileDirectory)" />
+        <Error Condition="!Exists('$(BuildTasksDllPath)')"
+               Text="BuildTasks DLL not found at '$(BuildTasksDllPath)'." />
+        <Error Condition="!Exists('$(TargetPath)')"
+               Text="TargetPath does not exist: '$(TargetPath)'." />
+
+        <Exec WorkingDirectory="$(ProjectDir)"
+              IgnoreExitCode="false"
+              ConsoleToMSBuild="true"
+              StandardOutputImportance="high"
+              StandardErrorImportance="high"
+              Command='dotnet exec &quot;$(BuildTasksDllPath)&quot; --targetPath &quot;$(TargetPath)&quot; --projectDir &quot;$(ProjectDir)&quot;' />
+    </Target>
+</Project>
