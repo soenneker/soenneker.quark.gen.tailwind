@@ -15,7 +15,7 @@
         <_TailwindOutputArg Condition="'$(TailwindOutput)' != ''"> --tailwindOutput &quot;$(TailwindOutput)&quot;</_TailwindOutputArg>
     </PropertyGroup>
 
-    <!-- Runs only on build (not design-time): analyzes Blazor for Tailwind classes, writes GeneratedTailwind.razor, runs Tailwind CLI. Output CSS default: wwwroot/css/quark-tailwind.css (override with TailwindOutput). -->
+    <!-- Runs only on build (not design-time): analyzes Blazor for Tailwind classes, writes TailwindClasses.txt, runs Tailwind CLI. Output CSS default: wwwroot/css/quark-tailwind.css (override with TailwindOutput). -->
     <Target Name="RunTailwindGeneratorBuildTasks"
             AfterTargets="Build"
             Condition="'$(DesignTimeBuild)'!='true' and '$(IsCrossTargetingBuild)'!='true' and '$(TailwindGeneratorBuildEnabled)'=='true'">

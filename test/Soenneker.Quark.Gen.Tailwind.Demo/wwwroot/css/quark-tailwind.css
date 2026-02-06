@@ -545,9 +545,6 @@
   .min-w-0 {
     min-width: calc(var(--spacing) * 0);
   }
-  .flex-1 {
-    flex: 1;
-  }
   .flex-shrink {
     flex-shrink: 1;
   }

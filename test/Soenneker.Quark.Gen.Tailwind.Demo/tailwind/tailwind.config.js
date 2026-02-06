@@ -1,5 +1,7 @@
 export default {
-  content: [ "./GeneratedTailwind.razor",
+  content: [
+    "./TailwindClasses.txt",
+    "./**/*.txt",
     "../**/*.razor",
     "../**/*.cshtml",
     "../**/*.html"
