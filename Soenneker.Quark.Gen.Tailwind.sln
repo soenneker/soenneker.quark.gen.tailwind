@@ -27,6 +27,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Soenneker.Quark.Gen.Tailwin
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Soenneker.Quark.Suite", "..\soenneker.quark.suite\src\Soenneker.Quark.Suite.csproj", "{9FAD48BF-9001-309D-E574-1443FF62400D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Soenneker.Quark.Suite.Demo", "..\soenneker.quark.suite\test\Soenneker.Quark.Suite.Demo\Soenneker.Quark.Suite.Demo.csproj", "{8C533FA5-EF64-F2F2-2222-6A3042DDC47B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -53,6 +55,10 @@ Global
 		{9FAD48BF-9001-309D-E574-1443FF62400D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9FAD48BF-9001-309D-E574-1443FF62400D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9FAD48BF-9001-309D-E574-1443FF62400D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8C533FA5-EF64-F2F2-2222-6A3042DDC47B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C533FA5-EF64-F2F2-2222-6A3042DDC47B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C533FA5-EF64-F2F2-2222-6A3042DDC47B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C533FA5-EF64-F2F2-2222-6A3042DDC47B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
