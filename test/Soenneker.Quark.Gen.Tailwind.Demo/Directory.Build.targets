@@ -1,0 +1,12 @@
+<Project>
+  <!-- When using ProjectReference (not the NuGet package), import targets from src and point to BuildTasks output -->
+  <PropertyGroup Condition="Exists('$(MSBuildThisFileDirectory)..\..\src\Soenneker.Quark.Gen.Tailwind\Soenneker.Quark.Gen.Tailwind.targets')">
+    <BuildTasksDllPath>$(MSBuildThisFileDirectory)..\..\src\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\Soenneker.Quark.Gen.Tailwind.BuildTasks.dll</BuildTasksDllPath>
+  </PropertyGroup>
+  <!-- Ensure BuildTasks is built before RunTailwindGeneratorBuildTasks runs -->
+  <Target Name="BuildTailwindBuildTasks" BeforeTargets="Build" Condition="Exists('$(MSBuildThisFileDirectory)..\..\src\Soenneker.Quark.Gen.Tailwind.BuildTasks\Soenneker.Quark.Gen.Tailwind.BuildTasks.csproj')">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)..\..\src\Soenneker.Quark.Gen.Tailwind.BuildTasks\Soenneker.Quark.Gen.Tailwind.BuildTasks.csproj" Targets="Build" Properties="Configuration=$(Configuration)" />
+  </Target>
+  <Import Project="$(MSBuildThisFileDirectory)..\..\src\Soenneker.Quark.Gen.Tailwind\Soenneker.Quark.Gen.Tailwind.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\src\Soenneker.Quark.Gen.Tailwind\Soenneker.Quark.Gen.Tailwind.targets')" />
+</Project>
