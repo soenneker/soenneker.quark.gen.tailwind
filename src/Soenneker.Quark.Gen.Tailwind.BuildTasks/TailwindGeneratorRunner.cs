@@ -15,7 +15,8 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 {
     private const string GeneratedContentFileName = "GeneratedTailwind.razor";
     private const string TailwindDirName = "tailwind";
-    private const string DefaultTailwindOutputRelative = "../wwwroot/css/tailwind.css";
+    /// <summary>Output path for Tailwind CLI relative to the tailwind directory. Override with --tailwindOutput or MSBuild TailwindOutput.</summary>
+    private const string DefaultTailwindOutputRelative = "../wwwroot/css/quark-tailwind.css";
 
     public async ValueTask<int> Run(string[] args, CancellationToken cancellationToken)
     {
@@ -93,6 +94,58 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         File.WriteAllText(configPath, text);
     }
 
+    /// <summary>Resolve full path to npx so the build can find it when PATH is not set (e.g. Visual Studio).</summary>
+    private static string ResolveNpxPath()
+    {
+        // Prefer npx from PATH if it runs (e.g. "npx" or "npx.cmd")
+        try
+        {
+            var pathEnv = Environment.GetEnvironmentVariable("PATH");
+            if (!string.IsNullOrEmpty(pathEnv))
+            {
+                var sep = Path.PathSeparator;
+                foreach (var dir in pathEnv.Split(sep, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (string.IsNullOrWhiteSpace(dir)) continue;
+                    var dirTrim = dir.Trim();
+                    foreach (var name in new[] { "npx.cmd", "npx.exe", "npx" })
+                    {
+                        var full = Path.Combine(dirTrim, name);
+                        if (File.Exists(full))
+                            return full;
+                    }
+                }
+            }
+        }
+        catch { /* ignore */ }
+
+        // Windows: common Node install locations (build often runs without user PATH)
+        var programFiles = Environment.GetEnvironmentVariable("ProgramFiles");
+        var localAppData = Environment.GetEnvironmentVariable("LOCALAPPDATA");
+        var appData = Environment.GetEnvironmentVariable("APPDATA");
+        var candidates = new List<string>();
+        if (!string.IsNullOrEmpty(programFiles))
+        {
+            candidates.Add(Path.Combine(programFiles, "nodejs", "npx.cmd"));
+            candidates.Add(Path.Combine(programFiles, "nodejs", "npx.exe"));
+        }
+        if (!string.IsNullOrEmpty(localAppData))
+        {
+            candidates.Add(Path.Combine(localAppData, "Programs", "node", "npx.cmd"));
+            candidates.Add(Path.Combine(localAppData, "Programs", "node", "npx.exe"));
+        }
+        if (!string.IsNullOrEmpty(appData))
+            candidates.Add(Path.Combine(appData, "npm", "npx.cmd"));
+
+        foreach (var c in candidates)
+        {
+            if (!string.IsNullOrEmpty(c) && File.Exists(c))
+                return c;
+        }
+
+        return "npx"; // fallback: hope PATH is set
+    }
+
     private static async Task<int> RunTailwindCli(string workingDir, string configPath, string inputCss, string outputCss, CancellationToken cancellationToken)
     {
         var inputFileName = Path.GetFileName(inputCss);
@@ -110,9 +163,10 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         argList.Add("-o");
         argList.Add(outputCss);
 
+        var npxPath = ResolveNpxPath();
         var psi = new ProcessStartInfo
         {
-            FileName = "npx",
+            FileName = npxPath,
             WorkingDirectory = workingDir,
             UseShellExecute = false,
             RedirectStandardOutput = true,
@@ -133,7 +187,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         }
         catch (Exception e)
         {
-            Console.Error.WriteLine($"Failed to start Tailwind CLI: {e.Message}. Ensure Node/npx and @tailwindcss/cli are available.");
+            Console.Error.WriteLine($"Failed to start Tailwind CLI: {e.Message}. Tried npx at: {npxPath}. Ensure Node is installed (e.g. Program Files\\nodejs or run from a shell where 'npx' is in PATH).");
             return 1;
         }
 
