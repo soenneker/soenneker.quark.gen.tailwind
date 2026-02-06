@@ -7,7 +7,7 @@ public static class Startup
 {
     public static void ConfigureServices(IServiceCollection services)
     {
-        services.AddScoped<ITailwindGeneratorWriteRunner, TailwindGeneratorWriteRunner>();
+        services.AddScoped<ITailwindGeneratorRunner, TailwindGeneratorRunner>();
         services.AddHostedService<ConsoleHostedService>();
     }
 }

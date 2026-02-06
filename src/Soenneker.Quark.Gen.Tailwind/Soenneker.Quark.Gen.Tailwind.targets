@@ -5,12 +5,17 @@
     </Target>
 
     <PropertyGroup>
+        <!-- NuGet package: DLL next to targets or in buildTransitive -->
         <_BuildTasksDir Condition="Exists('$(MSBuildThisFileDirectory)Soenneker.Quark.Gen.Tailwind.BuildTasks.dll')">$(MSBuildThisFileDirectory)</_BuildTasksDir>
         <_BuildTasksDir Condition="'$(_BuildTasksDir)'=='' and Exists('$(MSBuildThisFileDirectory)..\buildTransitive\Soenneker.Quark.Gen.Tailwind.BuildTasks.dll')">$(MSBuildThisFileDirectory)..\buildTransitive\</_BuildTasksDir>
+        <!-- ProjectReference: BuildTasks project output (e.g. bin/Debug or bin/Release) -->
+        <_BuildTasksDir Condition="'$(_BuildTasksDir)'=='' and Exists('$(MSBuildThisFileDirectory)..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\Soenneker.Quark.Gen.Tailwind.BuildTasks.dll')">$(MSBuildThisFileDirectory)..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\</_BuildTasksDir>
         <BuildTasksDllPath Condition="'$(BuildTasksDllPath)'=='' and '$(_BuildTasksDir)'!=''">$(_BuildTasksDir)Soenneker.Quark.Gen.Tailwind.BuildTasks.dll</BuildTasksDllPath>
         <TailwindGeneratorBuildEnabled Condition="'$(TailwindGeneratorBuildEnabled)'==''">true</TailwindGeneratorBuildEnabled>
+        <_TailwindOutputArg Condition="'$(TailwindOutput)' != ''"> --tailwindOutput &quot;$(TailwindOutput)&quot;</_TailwindOutputArg>
     </PropertyGroup>
 
+    <!-- Runs only on build (not design-time): analyzes Blazor for Tailwind classes, writes generated content, runs Tailwind CLI. -->
     <Target Name="RunTailwindGeneratorBuildTasks"
             AfterTargets="Build"
             Condition="'$(DesignTimeBuild)'!='true' and '$(IsCrossTargetingBuild)'!='true' and '$(TailwindGeneratorBuildEnabled)'=='true'">
@@ -28,6 +33,6 @@
               ConsoleToMSBuild="true"
               StandardOutputImportance="high"
               StandardErrorImportance="high"
-              Command='dotnet exec &quot;$(BuildTasksDllPath)&quot; --targetPath &quot;$(TargetPath)&quot; --projectDir &quot;$(ProjectDir)&quot;' />
+              Command='dotnet exec &quot;$(BuildTasksDllPath)&quot; --targetPath &quot;$(TargetPath)&quot; --projectDir &quot;$(ProjectDir)&quot;$(_TailwindOutputArg)' />
     </Target>
 </Project>

@@ -11,13 +11,13 @@ public sealed class ConsoleHostedService : IHostedService
 {
     private readonly ILogger<ConsoleHostedService> _logger;
     private readonly IHostApplicationLifetime _appLifetime;
-    private readonly ITailwindGeneratorWriteRunner _runner;
+    private readonly ITailwindGeneratorRunner _runner;
     private readonly BuildTasksCommandLineArgs _args;
 
     private int? _exitCode;
 
     public ConsoleHostedService(ILogger<ConsoleHostedService> logger, IHostApplicationLifetime appLifetime,
-        ITailwindGeneratorWriteRunner runner, BuildTasksCommandLineArgs args)
+        ITailwindGeneratorRunner runner, BuildTasksCommandLineArgs args)
     {
         _logger = logger;
         _appLifetime = appLifetime;

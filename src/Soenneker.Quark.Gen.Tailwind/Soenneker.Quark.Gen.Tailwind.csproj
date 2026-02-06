@@ -62,6 +62,17 @@
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" PrivateAssets="all" />
     </ItemGroup>
 
+    <!-- When consumed via ProjectReference, BuildTasks must exist so RunTailwindGeneratorBuildTasks can run. -->
+    <Target Name="BuildBuildTasksToolOnBuild"
+            BeforeTargets="Build"
+            Condition="!Exists('..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\Soenneker.Quark.Gen.Tailwind.BuildTasks.dll')">
+
+        <MSBuild Projects="..\Soenneker.Quark.Gen.Tailwind.BuildTasks\Soenneker.Quark.Gen.Tailwind.BuildTasks.csproj"
+                 Targets="Build"
+                 Properties="Configuration=$(Configuration)"
+                 BuildInParallel="true" />
+    </Target>
+
     <Target Name="BuildBuildTasksTool"
             BeforeTargets="Pack"
             Condition="'$(IsPackable)' == 'true'">

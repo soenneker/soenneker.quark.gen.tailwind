@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 
 namespace Soenneker.Quark.Gen.Tailwind.BuildTasks.Abstract;
 
-public interface ITailwindGeneratorWriteRunner
+public interface ITailwindGeneratorRunner
 {
     ValueTask<int> Run(string[] args, CancellationToken cancellationToken);
 }
