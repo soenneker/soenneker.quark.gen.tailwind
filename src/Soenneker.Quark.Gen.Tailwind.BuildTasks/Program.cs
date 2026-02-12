@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Soenneker.Quark.Gen.Tailwind.BuildTasks;
 
@@ -13,6 +12,17 @@ public sealed class Program
 
     public static async Task Main(string[] args)
     {
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception ex)
+                Console.Error.WriteLine($"Fatal: {ex}");
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            Console.Error.WriteLine($"UnobservedTaskException: {e.Exception}");
+            e.SetObserved();
+        };
+
         _cts = new CancellationTokenSource();
         Console.CancelKeyPress += OnCancelKeyPress;
 
@@ -42,7 +52,6 @@ public sealed class Program
             })
             .ConfigureServices((_, services) =>
             {
-                services.AddSingleton(new BuildTasksCommandLineArgs(args));
                 Startup.ConfigureServices(services);
             });
     }

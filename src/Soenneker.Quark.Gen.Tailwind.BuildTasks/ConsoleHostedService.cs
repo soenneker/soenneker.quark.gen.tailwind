@@ -12,17 +12,15 @@ public sealed class ConsoleHostedService : IHostedService
     private readonly ILogger<ConsoleHostedService> _logger;
     private readonly IHostApplicationLifetime _appLifetime;
     private readonly ITailwindGeneratorRunner _runner;
-    private readonly BuildTasksCommandLineArgs _args;
 
     private int? _exitCode;
 
     public ConsoleHostedService(ILogger<ConsoleHostedService> logger, IHostApplicationLifetime appLifetime,
-        ITailwindGeneratorRunner runner, BuildTasksCommandLineArgs args)
+        ITailwindGeneratorRunner runner)
     {
         _logger = logger;
         _appLifetime = appLifetime;
         _runner = runner;
-        _args = args;
     }
 
     public Task StartAsync(CancellationToken cancellationToken = default)
@@ -33,7 +31,7 @@ public sealed class ConsoleHostedService : IHostedService
             {
                 try
                 {
-                    _exitCode = await _runner.Run(_args.Args, cancellationToken).AsTask();
+                    _exitCode = await _runner.Run(cancellationToken).AsTask();
                 }
                 catch (Exception e)
                 {

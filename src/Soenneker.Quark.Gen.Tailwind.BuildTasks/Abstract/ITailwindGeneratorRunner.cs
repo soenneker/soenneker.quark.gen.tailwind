@@ -5,5 +5,5 @@ namespace Soenneker.Quark.Gen.Tailwind.BuildTasks.Abstract;
 
 public interface ITailwindGeneratorRunner
 {
-    ValueTask<int> Run(string[] args, CancellationToken cancellationToken);
+    ValueTask<int> Run(CancellationToken cancellationToken = default);
 }

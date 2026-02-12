@@ -542,9 +542,6 @@
   .w-auto {
     width: auto;
   }
-  .min-w-0 {
-    min-width: calc(var(--spacing) * 0);
-  }
   .flex-shrink {
     flex-shrink: 1;
   }
@@ -938,11 +935,6 @@
   .ease-out {
     --tw-ease: var(--ease-out);
     transition-timing-function: var(--ease-out);
-  }
-  .md\:col-span-10 {
-    @media (width >= 48rem) {
-      grid-column: span 10 / span 10;
-    }
   }
 }
 @property --tw-rotate-x {

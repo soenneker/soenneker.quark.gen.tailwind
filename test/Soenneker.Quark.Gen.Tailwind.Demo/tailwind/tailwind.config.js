@@ -1,6 +1,6 @@
 export default {
   content: [
-    "./TailwindClasses.txt",
+    "./TailwindElements.txt",
     "./**/*.txt",
     "../**/*.razor",
     "../**/*.cshtml",
