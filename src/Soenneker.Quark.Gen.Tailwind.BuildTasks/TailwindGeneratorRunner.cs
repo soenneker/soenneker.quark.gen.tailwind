@@ -219,7 +219,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                 try
                 {
                     html = await RenderWithTimeout(
-                        () => renderer.RenderToHtml(componentType),
+                        () => renderer.RenderToHtml(componentType, htmlDecode: true),
                         PerComponentRenderTimeout,
                         componentType.FullName ?? componentType.Name,
                         cancellationToken).NoSync();
@@ -234,7 +234,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                         await using (var minimalRenderer = new ComponentHtmlRenderer(minimalProvider, disposeServiceProvider: true))
                         {
                             html = await RenderWithTimeout(
-                                () => minimalRenderer.RenderToHtml(componentType),
+                                () => minimalRenderer.RenderToHtml(componentType, htmlDecode: true),
                                 PerComponentRenderTimeout,
                                 componentType.FullName ?? componentType.Name,
                                 cancellationToken).NoSync();
@@ -286,7 +286,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         return list;
     }
 
-    /// <summary>Extracts unique elements from HTML (tag + normalized class). Each yielded string is one full element line, e.g. &lt;div class="col col-md-10"&gt;&lt;/div&gt;.</summary>
+    /// <summary>Extracts unique elements from HTML (tag + normalized class). Each yielded string is one full element line, as HTML given to the browser (renderer already uses minimal attribute encoding).</summary>
     private static IEnumerable<string> ExtractUniqueElementsFromHtml(string html)
     {
         foreach (Match m in ElementWithClassRegex.Matches(html))

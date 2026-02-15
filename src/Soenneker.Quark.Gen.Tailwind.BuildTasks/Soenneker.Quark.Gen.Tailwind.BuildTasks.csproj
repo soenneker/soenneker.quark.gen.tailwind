@@ -17,7 +17,7 @@
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
         <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.3" />
         <PackageReference Include="Soenneker.Blazor.StaticNavigationManagers" Version="4.0.*" />
-        <PackageReference Include="Soenneker.Blazor.Utils.ComponentHtmlRenderers" Version="4.0.1" />
+        <PackageReference Include="Soenneker.Blazor.Utils.ComponentHtmlRenderers" Version="4.0.4" />
         <PackageReference Include="Soenneker.Blazor.Utils.NoOpJSRuntime" Version="4.0.1" />
         <PackageReference Include="Soenneker.Blazor.Utils.ResourceLoader" Version="4.0.1591" />
         <PackageReference Include="Soenneker.Extensions.Arrays.Strings" Version="4.0.3" />

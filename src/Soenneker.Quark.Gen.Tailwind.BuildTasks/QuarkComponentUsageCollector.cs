@@ -74,7 +74,7 @@ internal static class QuarkComponentUsageCollector
             try
             {
                 string? html = await RenderWithTimeout(
-                    () => renderer.RenderToHtml(componentType, parameters),
+                    () => renderer.RenderToHtml(componentType, parameters, htmlDecode: true),
                     PerComponentRenderTimeout,
                     $"Skipped {tagName} with params",
                     cancellationToken).NoSync();
