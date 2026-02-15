@@ -542,6 +542,9 @@
   .w-auto {
     width: auto;
   }
+  .min-w-0 {
+    min-width: calc(var(--spacing) * 0);
+  }
   .flex-shrink {
     flex-shrink: 1;
   }
