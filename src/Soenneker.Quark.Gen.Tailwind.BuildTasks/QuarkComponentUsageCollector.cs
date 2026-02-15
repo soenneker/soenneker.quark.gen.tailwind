@@ -299,8 +299,9 @@ internal static class QuarkComponentUsageCollector
         return list;
     }
 
+    /// <summary>Regex to extract tag and class. Uses quote-aware capture so classes containing ' (e.g. [class*='size-']) are not truncated.</summary>
     private static readonly Regex ElementWithClassRegex = new(
-        @"<(\w+)[^>]*\bclass\s*=\s*[""']([^""']*)[""'][^>]*>",
+        @"<(\w+)[^>]*\bclass\s*=\s*(""([^""]*)""|'([^']*)')[^>]*>",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static IEnumerable<string> ExtractUniqueElementsFromHtml(string html)
@@ -308,7 +309,7 @@ internal static class QuarkComponentUsageCollector
         foreach (Match m in ElementWithClassRegex.Matches(html))
         {
             string tag = m.Groups[1].Value;
-            string classValue = m.Groups[2].Value;
+            string classValue = m.Groups[3].Success ? m.Groups[3].Value : m.Groups[4].Value;
             if (string.IsNullOrWhiteSpace(classValue))
                 continue;
 

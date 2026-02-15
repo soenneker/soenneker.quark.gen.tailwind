@@ -46,9 +46,9 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     /// <summary>Output path for Tailwind CLI relative to the tailwind directory. Override with --tailwindOutput or MSBuild TailwindOutput.</summary>
     private const string DefaultTailwindOutputRelative = "../wwwroot/css/quark-tailwind.css";
 
-    /// <summary>Regex to extract tag name and class value from elements: &lt;tag ... class="..." ...&gt;</summary>
+    /// <summary>Regex to extract tag name and class value from elements: &lt;tag ... class="..." ...&gt;. Uses quote-aware capture so classes containing ' (e.g. [class*='size-']) are not truncated.</summary>
     private static readonly Regex ElementWithClassRegex = new(
-        @"<(\w+)[^>]*\bclass\s*=\s*[""']([^""']*)[""'][^>]*>",
+        @"<(\w+)[^>]*\bclass\s*=\s*(""([^""]*)""|'([^']*)')[^>]*>",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public async ValueTask<int> Run(CancellationToken cancellationToken = default)
@@ -292,7 +292,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         foreach (Match m in ElementWithClassRegex.Matches(html))
         {
             string tag = m.Groups[1].Value;
-            string classValue = m.Groups[2].Value;
+            string classValue = m.Groups[3].Success ? m.Groups[3].Value : m.Groups[4].Value;
             if (string.IsNullOrWhiteSpace(classValue))
                 continue;
             // Normalize: trim, collapse whitespace, sort so "col-md-10 col" and "col col-md-10" are the same element.
