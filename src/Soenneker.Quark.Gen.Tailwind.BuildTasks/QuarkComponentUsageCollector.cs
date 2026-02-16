@@ -6,7 +6,6 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Components;
 using Soenneker.Blazor.Utils.ComponentHtmlRenderers;
 using Soenneker.Extensions.Task;
 using Soenneker.Utils.File.Abstract;
@@ -148,10 +147,13 @@ internal static class QuarkComponentUsageCollector
                         string paramName = attrMatch.Groups[1].Value;
                         string value = attrMatch.Groups[2].Value.Trim();
 
-                        if (paramName.StartsWith("@", StringComparison.Ordinal) || value.StartsWith("@", StringComparison.Ordinal))
+                        if (paramName.StartsWith("@", StringComparison.Ordinal))
                             continue;
                         if (paramName is "ChildContent" or "ref" or "key")
                             continue;
+                        // Strip @ prefix so we capture @ColumnSize.Is8, @Margin.Is3, etc.
+                        if (value.StartsWith("@", StringComparison.Ordinal))
+                            value = value[1..].Trim();
                         if (!ExpressionRegex.IsMatch(value))
                             continue;
 

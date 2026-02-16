@@ -166,6 +166,9 @@
   .static {
     position: static;
   }
+  .col-span-12 {
+    grid-column: span 12 / span 12;
+  }
   .min-w-0 {
     min-width: calc(var(--spacing) * 0);
   }
