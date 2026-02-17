@@ -33,7 +33,6 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\..\soenneker.quark.suite\src\Soenneker.Quark.Suite.csproj" />
-        <ProjectReference Include="..\..\src\Soenneker.Quark.Gen.Tailwind\Soenneker.Quark.Gen.Tailwind.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     </ItemGroup>
 
 </Project>

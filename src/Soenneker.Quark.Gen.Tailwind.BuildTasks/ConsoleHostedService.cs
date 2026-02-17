@@ -31,11 +31,14 @@ public sealed class ConsoleHostedService : IHostedService
             {
                 try
                 {
-                    _exitCode = await _runner.Run(cancellationToken).AsTask();
+                    _exitCode = await _runner.Run(cancellationToken);
                 }
                 catch (Exception e)
                 {
+                    var message = $"Soenneker.Quark.Gen.Tailwind.BuildTasks: Unhandled exception: {e}";
                     _logger.LogError(e, "Unhandled exception");
+                    Console.Error.WriteLine(message);
+                    Console.WriteLine(message); // Also stdout so MSBuild log shows the reason
                     _exitCode = 1;
                 }
                 finally

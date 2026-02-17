@@ -12,27 +12,44 @@
         <_BuildTasksDir Condition="'$(_BuildTasksDir)'=='' and Exists('$(MSBuildThisFileDirectory)..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\Soenneker.Quark.Gen.Tailwind.BuildTasks.dll')">$(MSBuildThisFileDirectory)..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\</_BuildTasksDir>
         <BuildTasksDllPath Condition="'$(BuildTasksDllPath)'=='' and '$(_BuildTasksDir)'!=''">$(_BuildTasksDir)Soenneker.Quark.Gen.Tailwind.BuildTasks.dll</BuildTasksDllPath>
         <TailwindGeneratorBuildEnabled Condition="'$(TailwindGeneratorBuildEnabled)'==''">true</TailwindGeneratorBuildEnabled>
+        <!-- ProjectDir with no trailing backslash for reliable Exec quoting. Fallback to MSBuildProjectDirectory when ProjectDir is empty (e.g. when building the package project itself). -->
+        <_TailwindProjectDir>$([System.IO.Path]::GetDirectoryName('$(ProjectDir)x'))</_TailwindProjectDir>
+        <_TailwindProjectDir Condition="'$(_TailwindProjectDir)' == ''">$(MSBuildProjectDirectory)</_TailwindProjectDir>
+        <!-- Default output: wwwroot/css so consuming projects get CSS in standard static content path (override with TailwindOutput). -->
+        <TailwindOutput Condition="'$(TailwindOutput)' == ''">$(_TailwindProjectDir)\wwwroot\css\quark-tailwind.css</TailwindOutput>
         <_TailwindOutputArg Condition="'$(TailwindOutput)' != ''"> --tailwindOutput &quot;$(TailwindOutput)&quot;</_TailwindOutputArg>
     </PropertyGroup>
 
-    <!-- Runs only on build (not design-time): analyzes Blazor for Tailwind classes, writes TailwindElements.txt (one element per line), runs Tailwind CLI. Output CSS default: wwwroot/css/quark-tailwind.css (override with TailwindOutput). -->
+    <!-- Runs before Build so generated CSS exists and can be included in Content for copy to output. -->
     <Target Name="RunTailwindGeneratorBuildTasks"
-            AfterTargets="Build"
+            BeforeTargets="Build"
             Condition="'$(DesignTimeBuild)'!='true' and '$(IsCrossTargetingBuild)'!='true' and '$(TailwindGeneratorBuildEnabled)'=='true'">
 
-        <Message Importance="high" Text="Running Soenneker.Quark.Gen.Tailwind BuildTasks: targetPath=$(TargetPath) projectDir=$(ProjectDir)" />
+        <Message Importance="high" Text="Running Soenneker.Quark.Gen.Tailwind BuildTasks: projectDir=$(_TailwindProjectDir)" />
+        <Error Condition="'$(_TailwindProjectDir)' == ''"
+               Text="Soenneker.Quark.Gen.Tailwind: project directory could not be resolved (ProjectDir and MSBuildProjectDirectory are empty). Set TailwindProjectDir or build a project that has a valid project directory." />
         <Error Condition="'$(BuildTasksDllPath)'==''"
                Text="BuildTasksDllPath was not resolved. MSBuildThisFileDirectory=$(MSBuildThisFileDirectory)" />
         <Error Condition="!Exists('$(BuildTasksDllPath)')"
                Text="BuildTasks DLL not found at '$(BuildTasksDllPath)'." />
-        <Error Condition="!Exists('$(TargetPath)')"
-               Text="TargetPath does not exist: '$(TargetPath)'." />
 
-        <Exec WorkingDirectory="$(ProjectDir)"
+        <Exec WorkingDirectory="$(_TailwindProjectDir)"
               IgnoreExitCode="false"
               ConsoleToMSBuild="true"
               StandardOutputImportance="high"
               StandardErrorImportance="high"
-              Command='dotnet exec &quot;$(BuildTasksDllPath)&quot; --targetPath &quot;$(TargetPath)&quot; --projectDir &quot;$(ProjectDir)&quot;$(_TailwindOutputArg)' />
+              Command='dotnet exec &quot;$(BuildTasksDllPath)&quot; --projectDir &quot;$(_TailwindProjectDir)&quot;$(_TailwindOutputArg)' />
+    </Target>
+
+    <!-- Copy generated Tailwind CSS to build output (Content pipeline may run before our target). -->
+    <Target Name="IncludeGeneratedTailwindCss" AfterTargets="RunTailwindGeneratorBuildTasks">
+        <PropertyGroup Condition="Exists('$(TailwindOutput)')">
+            <_TailwindCssOutputDir>$(OutputPath)wwwroot\css</_TailwindCssOutputDir>
+        </PropertyGroup>
+        <MakeDir Directories="$(_TailwindCssOutputDir)" Condition="Exists('$(TailwindOutput)') and !Exists('$(_TailwindCssOutputDir)')" />
+        <Copy SourceFiles="$(TailwindOutput)"
+              DestinationFolder="$(_TailwindCssOutputDir)"
+              Condition="Exists('$(TailwindOutput)')"
+              SkipUnchangedFiles="true" />
     </Target>
 </Project>
