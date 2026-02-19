@@ -17,6 +17,7 @@
         <_TailwindProjectDir Condition="'$(_TailwindProjectDir)' == ''">$(MSBuildProjectDirectory)</_TailwindProjectDir>
         <!-- Default output: wwwroot/css so consuming projects get CSS in standard static content path (override with TailwindOutput). -->
         <TailwindOutput Condition="'$(TailwindOutput)' == ''">$(_TailwindProjectDir)\wwwroot\css\quark-tailwind.css</TailwindOutput>
+        <TailwindMinOutput Condition="'$(TailwindMinOutput)' == ''">$([System.IO.Path]::Combine($([System.IO.Path]::GetDirectoryName('$(TailwindOutput)')), 'quark-tailwind.min.css'))</TailwindMinOutput>
         <_TailwindOutputArg Condition="'$(TailwindOutput)' != ''"> --tailwindOutput &quot;$(TailwindOutput)&quot;</_TailwindOutputArg>
     </PropertyGroup>
 
@@ -50,6 +51,10 @@
         <Copy SourceFiles="$(TailwindOutput)"
               DestinationFolder="$(_TailwindCssOutputDir)"
               Condition="Exists('$(TailwindOutput)')"
+              SkipUnchangedFiles="true" />
+        <Copy SourceFiles="$(TailwindMinOutput)"
+              DestinationFolder="$(_TailwindCssOutputDir)"
+              Condition="Exists('$(TailwindMinOutput)')"
               SkipUnchangedFiles="true" />
     </Target>
 </Project>

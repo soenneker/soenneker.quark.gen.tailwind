@@ -72,12 +72,25 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         var inputCss = Path.Combine(tailwindDir, "input.css");
         var configPath = Path.Combine(tailwindDir, "tailwind.config.js");
 
-        int exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForCli, _nodeUtil, cancellationToken).ConfigureAwait(false);
+        int exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForCli, minify: false, _nodeUtil, cancellationToken).ConfigureAwait(false);
         if (exitCode != 0)
         {
             _logger.LogWarning("Tailwind CLI exited with code {ExitCode}. Ensure Node/npx and @tailwindcss/cli are available.", exitCode);
             return exitCode;
         }
+
+        // Build minified version alongside (quark-tailwind.min.css in same directory).
+        var minOutputCssFull = Path.Combine(Path.GetDirectoryName(outputCssFull)!, "quark-tailwind.min.css");
+        var outputDirForMin = Path.GetDirectoryName(minOutputCssFull);
+        if (!string.IsNullOrEmpty(outputDirForMin) && !Directory.Exists(outputDirForMin))
+            Directory.CreateDirectory(outputDirForMin);
+        var outputCssForMin = GetRelativePath(tailwindDir, minOutputCssFull);
+        exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForMin, minify: true, _nodeUtil, cancellationToken).ConfigureAwait(false);
+        if (exitCode != 0)
+        {
+            _logger.LogWarning("Tailwind CLI (minify) exited with code {ExitCode}. Full CSS was built; minified output may be missing.", exitCode);
+        }
+
         return 0;
     }
 
@@ -257,7 +270,7 @@ module.exports = {
         await File.WriteAllTextAsync(path, content, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<int> RunTailwindCli(string workingDir, string configPath, string inputCss, string outputCssArg, INodeUtil nodeUtil, CancellationToken cancellationToken)
+    private static async Task<int> RunTailwindCli(string workingDir, string configPath, string inputCss, string outputCssArg, bool minify, INodeUtil nodeUtil, CancellationToken cancellationToken)
     {
         var inputFileName = Path.GetFileName(inputCss);
         var hasConfig = File.Exists(configPath);
@@ -273,6 +286,8 @@ module.exports = {
         argList.Add(inputFileName);
         argList.Add("-o");
         argList.Add(outputCssArg);
+        if (minify)
+            argList.Add("--minify");
 
         var npxPath = await nodeUtil.GetNpxPath(cancellationToken).ConfigureAwait(false);
         var psi = new ProcessStartInfo
