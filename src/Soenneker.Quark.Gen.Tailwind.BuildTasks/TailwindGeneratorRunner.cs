@@ -2,18 +2,38 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Soenneker.Node.Util.Abstract;
 using Soenneker.Quark.Gen.Tailwind.BuildTasks.Abstract;
+using Soenneker.Extensions.String;
+using Soenneker.Extensions.Task;
 
 namespace Soenneker.Quark.Gen.Tailwind.BuildTasks;
 
 /// <inheritdoc cref="ITailwindGeneratorRunner"/>
 public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 {
-    private const string TailwindDirName = "tailwind";
+    private const string _tailwindDirName = "tailwind";
+    private const string _inlineGeneratedTxtFileName = "tw-inline.generated.txt";
+
+    // Regexes for GenerateInlineSourcesFromCsFiles ([TailwindPrefix] + Chain properties)
+    private static readonly Regex ClassWithAttrRegex = new(
+        @"\[(?<attr>[^\]]*TailwindPrefix[^\]]*)\]\s*" +
+        @"(?:(?:public|internal|private|protected)\s+)?(?:sealed\s+)?class\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\b(?<after>[^{]*)\{",
+        RegexOptions.Compiled | RegexOptions.Singleline);
+    private static readonly Regex TailwindPrefixArgsRegex = new(
+        @"TailwindPrefix\s*\(\s*""(?<prefix>[^""]+)""\s*\)\s*(?:,\s*Responsive\s*=\s*(?<resp>true|false))?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+    private static readonly Regex ChainPropRegex = new(
+        @"public\s+(?<type>[A-Za-z_][A-Za-z0-9_]*)\s+(?<prop>[A-Za-z_][A-Za-z0-9_]*)\s*=>\s*Chain\s*\(\s*(?<arg>[^)]+)\)\s*;",
+        RegexOptions.Compiled | RegexOptions.Singleline);
+    private static readonly Regex ChainBpPropRegex = new(
+        @"public\s+(?<type>[A-Za-z_][A-Za-z0-9_]*)\s+On[A-Za-z0-9_]+\s*=>\s*ChainBp\s*\(\s*BreakpointType\.(?<bp>[A-Za-z0-9_]+)\s*\)\s*;",
+        RegexOptions.Compiled | RegexOptions.Singleline);
 
     private readonly ILogger<TailwindGeneratorRunner> _logger;
     private readonly INodeUtil _nodeUtil;
@@ -27,18 +47,19 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     public async ValueTask<int> Run(CancellationToken cancellationToken = default)
     {
         string[] args = Environment.GetCommandLineArgs();
-        var map = ParseArgs(args);
+        Dictionary<string, string> map = ParseArgs(args);
 
-        if (!map.TryGetValue("--projectDir", out var projectDir) || string.IsNullOrWhiteSpace(projectDir))
+        if (!map.TryGetValue("--projectDir", out string? projectDir) || projectDir.IsNullOrWhiteSpace())
             return Fail("Missing required --projectDir");
 
         projectDir = Path.GetFullPath(projectDir.Trim().Trim('"'));
 
-        var tailwindDir = Path.Combine(projectDir, TailwindDirName);
+        string tailwindDir = Path.Combine(projectDir, _tailwindDirName);
         if (!Directory.Exists(tailwindDir))
             Directory.CreateDirectory(tailwindDir);
 
-        await EnsureInputCss(tailwindDir, cancellationToken).ConfigureAwait(false);
+        await EnsureInputCss(tailwindDir, cancellationToken).NoSync();
+        await GenerateInlineSourcesFromCsFiles(projectDir, tailwindDir, cancellationToken).ConfigureAwait(false);
         await EnsureTailwindConfig(tailwindDir, cancellationToken).ConfigureAwait(false);
         await EnsurePackageJson(tailwindDir, cancellationToken).ConfigureAwait(false);
 
@@ -53,7 +74,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
         // Resolve output path: prefer --tailwindOutput, else projectDir/wwwroot/css/quark-tailwind.css (no ambiguity).
         string outputCssFull;
-        if (map.TryGetValue("--tailwindOutput", out var outPath) && !string.IsNullOrWhiteSpace(outPath))
+        if (map.TryGetValue("--tailwindOutput", out string? outPath) && !string.IsNullOrWhiteSpace(outPath))
         {
             outputCssFull = Path.GetFullPath(outPath.Trim().Trim('"'));
         }
@@ -62,15 +83,15 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             outputCssFull = Path.GetFullPath(Path.Combine(projectDir, "wwwroot", "css", "quark-tailwind.css"));
         }
 
-        var outputDir = Path.GetDirectoryName(outputCssFull);
+        string? outputDir = Path.GetDirectoryName(outputCssFull);
         if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
             Directory.CreateDirectory(outputDir);
 
         // Pass path relative to tailwind dir so CLI writes to the correct file (avoids Windows absolute-path issues).
         string outputCssForCli = GetRelativePath(tailwindDir, outputCssFull);
 
-        var inputCss = Path.Combine(tailwindDir, "input.css");
-        var configPath = Path.Combine(tailwindDir, "tailwind.config.js");
+        string inputCss = Path.Combine(tailwindDir, "input.css");
+        string configPath = Path.Combine(tailwindDir, "tailwind.config.js");
 
         int exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForCli, minify: false, _nodeUtil, cancellationToken).ConfigureAwait(false);
         if (exitCode != 0)
@@ -80,11 +101,12 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         }
 
         // Build minified version alongside (quark-tailwind.min.css in same directory).
-        var minOutputCssFull = Path.Combine(Path.GetDirectoryName(outputCssFull)!, "quark-tailwind.min.css");
-        var outputDirForMin = Path.GetDirectoryName(minOutputCssFull);
+        string minOutputCssFull = Path.Combine(Path.GetDirectoryName(outputCssFull)!, "quark-tailwind.min.css");
+        string? outputDirForMin = Path.GetDirectoryName(minOutputCssFull);
         if (!string.IsNullOrEmpty(outputDirForMin) && !Directory.Exists(outputDirForMin))
             Directory.CreateDirectory(outputDirForMin);
-        var outputCssForMin = GetRelativePath(tailwindDir, minOutputCssFull);
+
+        string outputCssForMin = GetRelativePath(tailwindDir, minOutputCssFull);
         exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForMin, minify: true, _nodeUtil, cancellationToken).ConfigureAwait(false);
         if (exitCode != 0)
         {
@@ -96,21 +118,235 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
     private static string GetRelativePath(string fromDir, string toPath)
     {
-        var rel = Path.GetRelativePath(fromDir, toPath);
+        string rel = Path.GetRelativePath(fromDir, toPath);
         return rel.Replace('\\', '/');
+    }
+
+    private static async Task GenerateInlineSourcesFromCsFiles(string projectDir, string tailwindDir, CancellationToken cancellationToken)
+    {
+        // Output: tailwind/tw-inline.generated.txt (class names for @source to scan)
+        string outPath = Path.Combine(tailwindDir, _inlineGeneratedTxtFileName);
+
+        // ------------------------------------------------------------
+        // 1) Enumerate .cs files under projectDir, skipping junk
+        // ------------------------------------------------------------
+        static bool IsExcluded(string fullPath)
+        {
+            string p = fullPath.Replace('\\', '/');
+
+            return p.Contains("/bin/", StringComparison.OrdinalIgnoreCase)
+                || p.Contains("/obj/", StringComparison.OrdinalIgnoreCase)
+                || p.Contains("/node_modules/", StringComparison.OrdinalIgnoreCase)
+                || p.Contains("/.git/", StringComparison.OrdinalIgnoreCase)
+                || p.Contains("/tailwind/", StringComparison.OrdinalIgnoreCase); // don't scan generated tailwind files
+        }
+
+        IEnumerable<string> EnumerateCs(string root)
+        {
+            var stack = new Stack<string>();
+            stack.Push(root);
+
+            while (stack.Count > 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string dir = stack.Pop();
+                string[] subDirs;
+                try { subDirs = Directory.GetDirectories(dir); }
+                catch { continue; }
+
+                foreach (string sd in subDirs)
+                {
+                    if (!IsExcluded(sd))
+                        stack.Push(sd);
+                }
+
+                string[] files;
+                try { files = Directory.GetFiles(dir, "*.cs"); }
+                catch { continue; }
+
+                foreach (string f in files)
+                {
+                    if (!IsExcluded(f))
+                        yield return f;
+                }
+            }
+        }
+
+        // ------------------------------------------------------------
+        // 2) Regex: find [TailwindPrefix("...")] + class body
+        // ------------------------------------------------------------
+        // 3) Within class body: self-returning properties that call Chain("token")
+        // Strip comments to reduce false positives
+        static string StripComments(string s)
+        {
+            // block comments
+            s = Regex.Replace(s, @"/\*.*?\*/", "", RegexOptions.Singleline);
+            // line comments
+            s = Regex.Replace(s, @"//.*?$", "", RegexOptions.Multiline);
+            return s;
+        }
+
+        // Extract the full class body starting right after the first '{' of the class.
+        static string? TryGetClassBody(string text, int openBraceIndex)
+        {
+            int depth = 0;
+            for (int i = openBraceIndex; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c == '{') depth++;
+                else if (c == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        // body is between first { and matching }
+                        return text.Substring(openBraceIndex + 1, i - openBraceIndex - 1);
+                    }
+                }
+            }
+            return null;
+        }
+
+        static string? ParseToken(string arg, string propName)
+        {
+            arg = arg.Trim();
+
+            // "auto"
+            if (arg.Length >= 2 && arg[0] == '"' && arg[^1] == '"')
+                return arg.Substring(1, arg.Length - 2);
+
+            // GlobalKeyword.InheritValue -> inherit (best-effort)
+            // If you want a stronger mapping, handle known identifiers here.
+            // We can't evaluate non-const values; fall back to propName.
+            if (arg.Contains('.', StringComparison.Ordinal))
+            {
+                // If it looks like Inherit/Initial/Unset by name, use that
+                string lower = propName.ToLowerInvariant();
+                if (lower is "inherit" or "initial" or "unset")
+                    return lower;
+
+                // Otherwise: unknown identifier -> null (skip) or propName
+                return lower;
+            }
+
+            // Fallback: property name as token (Auto -> auto, etc.)
+            return propName.ToLowerInvariant();
+        }
+
+        var uniqueLines = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (string file in EnumerateCs(projectDir))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            string text;
+            try
+            {
+                text = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                continue;
+            }
+
+            text = StripComments(text);
+
+            foreach (Match m in ClassWithAttrRegex.Matches(text))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string attrBlob = m.Groups["attr"].Value;
+                var am = TailwindPrefixArgsRegex.Match(attrBlob);
+                if (!am.Success)
+                    continue;
+
+                string prefix = am.Groups["prefix"].Value;
+                bool responsive = true;
+                if (am.Groups["resp"].Success && bool.TryParse(am.Groups["resp"].Value, out bool r))
+                    responsive = r;
+
+                string className = m.Groups["name"].Value;
+
+                // Find body
+                int braceIdx = m.Index + m.Length - 1; // position of the '{' matched by regex
+                string? body = TryGetClassBody(text, braceIdx);
+                if (body is null)
+                    continue;
+
+                // Collect tokens from Chain(...) properties that return the same type as the class
+                var tokens = new HashSet<string>(StringComparer.Ordinal);
+
+                foreach (Match pm in ChainPropRegex.Matches(body))
+                {
+                    string typeName = pm.Groups["type"].Value;
+                    if (!string.Equals(typeName, className, StringComparison.Ordinal))
+                        continue;
+
+                    string prop = pm.Groups["prop"].Value;
+                    string arg = pm.Groups["arg"].Value;
+
+                    string? token = ParseToken(arg, prop);
+                    if (!string.IsNullOrWhiteSpace(token))
+                        tokens.Add(token);
+                }
+
+                if (tokens.Count == 0)
+                    continue;
+
+                // If responsive=true but class doesn't even expose breakpoint properties, still fine:
+                // it just generates responsive variants proactively.
+                // if (responsive && !ChainBpPropRegex.IsMatch(body)) responsive = false;
+
+                // Expand to full class names so @source can scan this .txt file
+                var tokenList = new List<string>(tokens);
+                tokenList.Sort(StringComparer.Ordinal);
+
+                if (responsive)
+                {
+                    foreach (string bp in new[] { "", "sm:", "md:", "lg:", "xl:", "2xl:" })
+                    {
+                        foreach (string token in tokenList)
+                            uniqueLines.Add(bp + prefix + token);
+                    }
+                }
+                else
+                {
+                    foreach (string token in tokenList)
+                        uniqueLines.Add(prefix + token);
+                }
+            }
+        }
+
+        // Deterministic output
+        var final = new List<string>(uniqueLines);
+        final.Sort(StringComparer.Ordinal);
+
+        var sb = new StringBuilder(4096);
+        sb.AppendLine("# Auto-generated by Soenneker.Quark.Gen.Tailwind.BuildTasks");
+        sb.AppendLine("# Do not edit manually. Class names for Tailwind @source to scan.");
+
+        foreach (string line in final)
+            sb.AppendLine(line);
+
+        await File.WriteAllTextAsync(outPath, sb.ToString(), cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task EnsureInputCss(string tailwindDir, CancellationToken cancellationToken)
     {
-        var path = Path.Combine(tailwindDir, "input.css");
+        string path = Path.Combine(tailwindDir, "input.css");
         if (File.Exists(path))
             return;
+
         // Tailwind v4 syntax (v3 @tailwind directives are deprecated and can cause no output or errors).
         await File.WriteAllTextAsync(path, @"@import ""tailwindcss"";
 @import ""tw-animate-css"";
- 
+
+/* [TailwindPrefix] class names – Tailwind scans this file via @source */
+@source ""./tw-inline.generated.txt"";
+
 /* Scan everything one level up */
-@source ""../**/*.{razor,cshtml,html,cs}"";
+@source ""../**/*.{razor,cshtml,html,cs}""; 
 
 /* Exclude junk */
 @source not ""../**/{bin,obj,node_modules,.git}/**"";
@@ -240,9 +476,10 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
     private static async Task EnsureTailwindConfig(string tailwindDir, CancellationToken cancellationToken)
     {
-        var path = Path.Combine(tailwindDir, "tailwind.config.js");
+        string path = Path.Combine(tailwindDir, "tailwind.config.js");
         if (File.Exists(path))
             return;
+
         const string content = @"/** @type {import('tailwindcss').Config} */
 module.exports = {
   theme: { extend: {} },
@@ -254,9 +491,10 @@ module.exports = {
 
     private static async Task EnsurePackageJson(string tailwindDir, CancellationToken cancellationToken)
     {
-        var path = Path.Combine(tailwindDir, "package.json");
+        string path = Path.Combine(tailwindDir, "package.json");
         if (File.Exists(path))
             return;
+
         const string content = @"{
   ""name"": ""quark-tailwind"",
   ""private"": true,
@@ -272,9 +510,9 @@ module.exports = {
 
     private static async Task<int> RunTailwindCli(string workingDir, string configPath, string inputCss, string outputCssArg, bool minify, INodeUtil nodeUtil, CancellationToken cancellationToken)
     {
-        var inputFileName = Path.GetFileName(inputCss);
-        var hasConfig = File.Exists(configPath);
-        var configFileName = hasConfig ? Path.GetFileName(configPath) : null;
+        string inputFileName = Path.GetFileName(inputCss);
+        bool hasConfig = File.Exists(configPath);
+        string? configFileName = hasConfig ? Path.GetFileName(configPath) : null;
 
         var argList = new List<string> { "@tailwindcss/cli" };
         if (hasConfig && !string.IsNullOrEmpty(configFileName))
@@ -289,7 +527,7 @@ module.exports = {
         if (minify)
             argList.Add("--minify");
 
-        var npxPath = await nodeUtil.GetNpxPath(cancellationToken).ConfigureAwait(false);
+        string npxPath = await nodeUtil.GetNpxPath(cancellationToken).ConfigureAwait(false);
         var psi = new ProcessStartInfo
         {
             FileName = npxPath,
@@ -299,7 +537,7 @@ module.exports = {
             RedirectStandardError = true,
             CreateNoWindow = true
         };
-        foreach (var a in argList)
+        foreach (string a in argList)
             psi.ArgumentList.Add(a);
 
         using var process = new Process { StartInfo = psi };
@@ -317,15 +555,16 @@ module.exports = {
             return 1;
         }
 
-        var outTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        Task<string> outTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        Task<string> errTask = process.StandardError.ReadToEndAsync(cancellationToken);
+
         using (cancellationToken.Register(() => tcs.TrySetCanceled()))
         {
             try
             {
                 int exit = await tcs.Task.ConfigureAwait(false);
-                var stdout = await outTask.ConfigureAwait(false);
-                var stderr = await errTask.ConfigureAwait(false);
+                string stdout = await outTask.ConfigureAwait(false);
+                string stderr = await errTask.ConfigureAwait(false);
                 if (!string.IsNullOrEmpty(stdout))
                     Console.WriteLine(stdout);
                 if (!string.IsNullOrEmpty(stderr))
