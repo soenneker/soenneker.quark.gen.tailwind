@@ -20,20 +20,13 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     private const string _tailwindDirName = "tailwind";
     private const string _inlineGeneratedTxtFileName = "tw-inline.generated.txt";
 
-    // Regexes for GenerateInlineSourcesFromCsFiles ([TailwindPrefix] / [TailwindSourceInline] + self-referencing Chain properties)
+    // Regexes for GenerateInlineSourcesFromCsFiles ([TailwindPrefix] + self-referencing Chain properties)
     private static readonly Regex ClassWithAttrRegex = new(
         @"\[(?<attr>[^\]]*TailwindPrefix[^\]]*)\]\s*" +
         @"(?:(?:public|internal|private|protected)\s+)?(?:sealed\s+)?class\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\b(?<after>[^{]*)\{",
         RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Regex TailwindPrefixArgsRegex = new(
-        @"TailwindPrefix\s*\(\s*""(?<prefix>[^""]+)""\s*\)\s*(?:,\s*Responsive\s*=\s*(?<resp>true|false))?",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
-    private static readonly Regex ClassWithTailwindSourceInlineRegex = new(
-        @"\[(?<attr>[^\]]*TailwindSourceInline[^\]]*)\]\s*" +
-        @"(?:(?:public|internal|private|protected)\s+)?(?:sealed\s+)?class\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\b(?<after>[^{]*)\{",
-        RegexOptions.Compiled | RegexOptions.Singleline);
-    private static readonly Regex TailwindSourceInlineArgsRegex = new(
-        @"TailwindSourceInline\s*\(\s*""(?<pattern>[^""]+)""\s*\)\s*(?:,\s*Responsive\s*=\s*(?<resp>true|false))?",
+        @"TailwindPrefix\s*\(\s*""(?<prefix>[^""]+)""(?:\s*,\s*Responsive\s*=\s*(?<resp>true|false))?\s*\)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
     private static readonly Regex ChainPropRegex = new(
         @"public\s+(?<type>[A-Za-z_][A-Za-z0-9_]*)\s+(?<prop>[A-Za-z_][A-Za-z0-9_]*)\s*=>\s*Chain\s*\(\s*(?<arg>[^)]+)\)\s*;",
@@ -61,12 +54,31 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
         projectDir = Path.GetFullPath(projectDir.Trim().Trim('"'));
 
+        var sourceRoots = new List<string> { projectDir };
+        if (map.TryGetValue("--sourceDirs", out string? sourceDirs) && !sourceDirs.IsNullOrWhiteSpace())
+        {
+            foreach (string dir in sourceDirs.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (dir.Length == 0) continue;
+                string full = Path.GetFullPath(dir.Trim().Trim('"'));
+                if (!sourceRoots.Contains(full))
+                    sourceRoots.Add(full);
+            }
+        }
+        // Fallback: include parent of projectDir so we still find source when projectDir is e.g. an empty or wrong path.
+        string? projectParent = Path.GetDirectoryName(projectDir);
+        if (!string.IsNullOrEmpty(projectParent) && Directory.Exists(projectParent) &&
+            !sourceRoots.Contains(projectParent))
+            sourceRoots.Add(projectParent);
+
+        Console.WriteLine($"TailwindGenerator: projectDir={projectDir}, sourceRoots={sourceRoots.Count}");
+
         string tailwindDir = Path.Combine(projectDir, _tailwindDirName);
         if (!Directory.Exists(tailwindDir))
             Directory.CreateDirectory(tailwindDir);
 
         await EnsureInputCss(tailwindDir, cancellationToken).NoSync();
-        await GenerateInlineSourcesFromCsFiles(projectDir, tailwindDir, cancellationToken).ConfigureAwait(false);
+        await GenerateInlineSourcesFromCsFiles(sourceRoots, tailwindDir, cancellationToken).ConfigureAwait(false);
         await EnsureTailwindConfig(tailwindDir, cancellationToken).ConfigureAwait(false);
         await EnsurePackageJson(tailwindDir, cancellationToken).ConfigureAwait(false);
 
@@ -129,7 +141,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         return rel.Replace('\\', '/');
     }
 
-    private static async Task GenerateInlineSourcesFromCsFiles(string projectDir, string tailwindDir, CancellationToken cancellationToken)
+    private static async Task GenerateInlineSourcesFromCsFiles(IEnumerable<string> sourceRoots, string tailwindDir, CancellationToken cancellationToken)
     {
         // Output: tailwind/tw-inline.generated.txt (class names for @source to scan)
         string outPath = Path.Combine(tailwindDir, _inlineGeneratedTxtFileName);
@@ -242,9 +254,20 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         }
 
         var uniqueLines = new HashSet<string>(StringComparer.Ordinal);
+        int totalFilesScanned = 0;
+        int tailwindPrefixClasses = 0;
 
-        foreach (string file in EnumerateCs(projectDir))
+        foreach (string sourceRoot in sourceRoots)
         {
+            if (!Directory.Exists(sourceRoot))
+            {
+                Console.WriteLine($"TailwindGenerator [inline]: skipping missing source root: {sourceRoot}");
+                continue;
+            }
+            Console.WriteLine($"TailwindGenerator [inline]: scanning source root: {sourceRoot}");
+            foreach (string file in EnumerateCs(sourceRoot))
+            {
+            totalFilesScanned++;
             cancellationToken.ThrowIfCancellationRequested();
 
             string text;
@@ -305,84 +328,49 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                 // it just generates responsive variants proactively.
                 // if (responsive && !ChainBpPropRegex.IsMatch(body)) responsive = false;
 
-                // Expand to full class names so @source can scan this .txt file
                 var tokenList = new List<string>(tokens);
                 tokenList.Sort(StringComparer.Ordinal);
-
+                int added = 0;
                 if (responsive)
                 {
                     foreach (string bp in new[] { "", "sm:", "md:", "lg:", "xl:", "2xl:" })
                     {
                         foreach (string token in tokenList)
+                        {
                             uniqueLines.Add(bp + prefix + token);
+                            added++;
+                        }
                     }
                 }
                 else
                 {
                     foreach (string token in tokenList)
+                    {
                         uniqueLines.Add(prefix + token);
+                        added++;
+                    }
                 }
+                tailwindPrefixClasses += added;
+                Console.WriteLine($"TailwindGenerator [inline]: [TailwindPrefix] {file} -> class {className}, prefix=\"{prefix}\", responsive={responsive}, tokens=[{string.Join(", ", tokenList)}], lines added={added}");
             }
 
-            // [TailwindSourceInline("pattern", Responsive = true/false)]: same pattern — self-referencing Chain/ChainBp → tokens; Responsive → breakpoint prefixes
-            foreach (Match m in ClassWithTailwindSourceInlineRegex.Matches(text))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                string attrBlob = m.Groups["attr"].Value;
-                string className = m.Groups["name"].Value;
-
-                int braceIdx = m.Index + m.Length - 1;
-                string? body = TryGetClassBody(text, braceIdx);
-                if (body is null)
-                    continue;
-
-                var tokens = new HashSet<string>(StringComparer.Ordinal);
-                foreach (Match pm in ChainPropRegex.Matches(body))
-                {
-                    string typeName = pm.Groups["type"].Value;
-                    if (!string.Equals(typeName, className, StringComparison.Ordinal))
-                        continue;
-                    string prop = pm.Groups["prop"].Value;
-                    string arg = pm.Groups["arg"].Value;
-                    string? token = ParseToken(arg, prop);
-                    if (!string.IsNullOrWhiteSpace(token))
-                        tokens.Add(token);
-                }
-
-                if (tokens.Count == 0)
-                    continue;
-
-                var tokenList = new List<string>(tokens);
-                tokenList.Sort(StringComparer.Ordinal);
-
-                foreach (Match am in TailwindSourceInlineArgsRegex.Matches(attrBlob))
-                {
-                    string pattern = am.Groups["pattern"].Value;
-                    bool responsive = true;
-                    if (am.Groups["resp"].Success && bool.TryParse(am.Groups["resp"].Value, out bool r))
-                        responsive = r;
-
-                    if (responsive)
-                    {
-                        foreach (string bp in new[] { "", "sm:", "md:", "lg:", "xl:", "2xl:" })
-                        {
-                            foreach (string token in tokenList)
-                                uniqueLines.Add(bp + pattern + token);
-                        }
-                    }
-                    else
-                    {
-                        foreach (string token in tokenList)
-                            uniqueLines.Add(pattern + token);
-                    }
-                }
             }
         }
 
         // Deterministic output
         var final = new List<string>(uniqueLines);
         final.Sort(StringComparer.Ordinal);
+
+        Console.WriteLine($"TailwindGenerator [inline]: summary: {totalFilesScanned} .cs files scanned, {final.Count} class names (TailwindPrefix={tailwindPrefixClasses})");
+        Console.WriteLine($"TailwindGenerator [inline]: output -> {outPath}");
+        if (final.Count > 0)
+        {
+            int sample = Math.Min(15, final.Count);
+            var sampleList = new List<string>(sample);
+            for (int i = 0; i < sample; i++)
+                sampleList.Add(final[i]);
+            Console.WriteLine($"TailwindGenerator [inline]: sample classes: [{string.Join(", ", sampleList)}]");
+        }
 
         var sb = new StringBuilder(4096);
         sb.AppendLine("# Auto-generated by Soenneker.Quark.Gen.Tailwind.BuildTasks");
@@ -404,7 +392,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         await File.WriteAllTextAsync(path, @"@import ""tailwindcss"";
 @import ""tw-animate-css"";
 
-/* [TailwindPrefix] / [TailwindSourceInline] class names – Tailwind scans this file via @source */
+/* [TailwindPrefix] class names - Tailwind scans this file via @source */
 @source ""./tw-inline.generated.txt"";
 
 /* Scan everything one level up */

@@ -64,8 +64,7 @@
 
     <!-- When consumed via ProjectReference, BuildTasks must exist so RunTailwindGeneratorBuildTasks can run. -->
     <Target Name="BuildBuildTasksToolOnBuild"
-            BeforeTargets="Build"
-            Condition="!Exists('..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\Soenneker.Quark.Gen.Tailwind.BuildTasks.dll')">
+            BeforeTargets="Build">
 
         <MSBuild Projects="..\Soenneker.Quark.Gen.Tailwind.BuildTasks\Soenneker.Quark.Gen.Tailwind.BuildTasks.csproj"
                  Targets="Build"
