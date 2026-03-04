@@ -20,13 +20,20 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     private const string _tailwindDirName = "tailwind";
     private const string _inlineGeneratedTxtFileName = "tw-inline.generated.txt";
 
-    // Regexes for GenerateInlineSourcesFromCsFiles ([TailwindPrefix] + Chain properties)
+    // Regexes for GenerateInlineSourcesFromCsFiles ([TailwindPrefix] / [TailwindSourceInline] + self-referencing Chain properties)
     private static readonly Regex ClassWithAttrRegex = new(
         @"\[(?<attr>[^\]]*TailwindPrefix[^\]]*)\]\s*" +
         @"(?:(?:public|internal|private|protected)\s+)?(?:sealed\s+)?class\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\b(?<after>[^{]*)\{",
         RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Regex TailwindPrefixArgsRegex = new(
         @"TailwindPrefix\s*\(\s*""(?<prefix>[^""]+)""\s*\)\s*(?:,\s*Responsive\s*=\s*(?<resp>true|false))?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+    private static readonly Regex ClassWithTailwindSourceInlineRegex = new(
+        @"\[(?<attr>[^\]]*TailwindSourceInline[^\]]*)\]\s*" +
+        @"(?:(?:public|internal|private|protected)\s+)?(?:sealed\s+)?class\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\b(?<after>[^{]*)\{",
+        RegexOptions.Compiled | RegexOptions.Singleline);
+    private static readonly Regex TailwindSourceInlineArgsRegex = new(
+        @"TailwindSourceInline\s*\(\s*""(?<pattern>[^""]+)""\s*\)\s*(?:,\s*Responsive\s*=\s*(?<resp>true|false))?",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
     private static readonly Regex ChainPropRegex = new(
         @"public\s+(?<type>[A-Za-z_][A-Za-z0-9_]*)\s+(?<prop>[A-Za-z_][A-Za-z0-9_]*)\s*=>\s*Chain\s*\(\s*(?<arg>[^)]+)\)\s*;",
@@ -316,6 +323,61 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                         uniqueLines.Add(prefix + token);
                 }
             }
+
+            // [TailwindSourceInline("pattern", Responsive = true/false)]: same pattern — self-referencing Chain/ChainBp → tokens; Responsive → breakpoint prefixes
+            foreach (Match m in ClassWithTailwindSourceInlineRegex.Matches(text))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string attrBlob = m.Groups["attr"].Value;
+                string className = m.Groups["name"].Value;
+
+                int braceIdx = m.Index + m.Length - 1;
+                string? body = TryGetClassBody(text, braceIdx);
+                if (body is null)
+                    continue;
+
+                var tokens = new HashSet<string>(StringComparer.Ordinal);
+                foreach (Match pm in ChainPropRegex.Matches(body))
+                {
+                    string typeName = pm.Groups["type"].Value;
+                    if (!string.Equals(typeName, className, StringComparison.Ordinal))
+                        continue;
+                    string prop = pm.Groups["prop"].Value;
+                    string arg = pm.Groups["arg"].Value;
+                    string? token = ParseToken(arg, prop);
+                    if (!string.IsNullOrWhiteSpace(token))
+                        tokens.Add(token);
+                }
+
+                if (tokens.Count == 0)
+                    continue;
+
+                var tokenList = new List<string>(tokens);
+                tokenList.Sort(StringComparer.Ordinal);
+
+                foreach (Match am in TailwindSourceInlineArgsRegex.Matches(attrBlob))
+                {
+                    string pattern = am.Groups["pattern"].Value;
+                    bool responsive = true;
+                    if (am.Groups["resp"].Success && bool.TryParse(am.Groups["resp"].Value, out bool r))
+                        responsive = r;
+
+                    if (responsive)
+                    {
+                        foreach (string bp in new[] { "", "sm:", "md:", "lg:", "xl:", "2xl:" })
+                        {
+                            foreach (string token in tokenList)
+                                uniqueLines.Add(bp + pattern + token);
+                        }
+                    }
+                    else
+                    {
+                        foreach (string token in tokenList)
+                            uniqueLines.Add(pattern + token);
+                    }
+                }
+            }
         }
 
         // Deterministic output
@@ -342,7 +404,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         await File.WriteAllTextAsync(path, @"@import ""tailwindcss"";
 @import ""tw-animate-css"";
 
-/* [TailwindPrefix] class names – Tailwind scans this file via @source */
+/* [TailwindPrefix] / [TailwindSourceInline] class names – Tailwind scans this file via @source */
 @source ""./tw-inline.generated.txt"";
 
 /* Scan everything one level up */
