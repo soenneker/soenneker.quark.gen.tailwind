@@ -35,10 +35,15 @@ jobs:
           languages: csharp
           build-mode: manual
 
-      - name: Restore src
-        run: dotnet restore ./src/Soenneker.Quark.Gen.Tailwind/Soenneker.Quark.Gen.Tailwind.csproj --verbosity minimal
+      - name: Restore (BuildTasks then main library)
+        run: |
+          dotnet restore ./src/Soenneker.Quark.Gen.Tailwind.BuildTasks/Soenneker.Quark.Gen.Tailwind.BuildTasks.csproj --verbosity minimal
+          dotnet restore ./src/Soenneker.Quark.Gen.Tailwind/Soenneker.Quark.Gen.Tailwind.csproj --verbosity minimal
 
-      - name: Build src
+      - name: Build BuildTasks
+        run: dotnet build ./src/Soenneker.Quark.Gen.Tailwind.BuildTasks/Soenneker.Quark.Gen.Tailwind.BuildTasks.csproj --no-restore -c Release
+
+      - name: Build main library
         run: dotnet build ./src/Soenneker.Quark.Gen.Tailwind/Soenneker.Quark.Gen.Tailwind.csproj --no-restore -c Release
 
       - name: Perform CodeQL Analysis
