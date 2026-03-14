@@ -1,12 +1,21 @@
 name: build-and-test
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 on:
-  # Testing - run for any PRs.
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 env:
-    "PipelineEnvironment": true
+  PipelineEnvironment: true
+  NUGET_XMLDOC_MODE: skip
 
 jobs:
   build-and-test:
@@ -14,6 +23,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5

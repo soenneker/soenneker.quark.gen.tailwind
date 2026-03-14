@@ -9,9 +9,15 @@ on:
       - main
     paths-ignore:
       - 'test/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
 
 env:
-    "PipelineEnvironment": true
+  PipelineEnvironment: true
+  NUGET_XMLDOC_MODE: skip
 
 jobs:
   publish-package:
@@ -19,11 +25,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      
+        with:
+          persist-credentials: false
+
       - name: Setting up build version
+        shell: bash
         run: |
-          version=$(($GITHUB_RUN_NUMBER))
-          echo "BUILD_VERSION=4.0.$version" >> ${GITHUB_ENV}
+          echo "BUILD_VERSION=4.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -63,7 +71,7 @@ jobs:
         run: dotnet test test/Soenneker.Quark.Gen.Tailwind.Tests/Soenneker.Quark.Gen.Tailwind.Tests.csproj --no-restore --verbosity normal
 
       - name: Pack
-        run: dotnet pack --no-build --configuration Release --output .
+        run: dotnet pack src/Soenneker.Quark.Gen.Tailwind/Soenneker.Quark.Gen.Tailwind.csproj --no-build --configuration Release --output .
 
       - name: Publish to NuGet with retry
         run: |
