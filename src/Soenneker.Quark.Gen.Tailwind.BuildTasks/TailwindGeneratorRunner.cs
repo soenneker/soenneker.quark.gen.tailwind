@@ -549,8 +549,8 @@ module.exports = {
   ""name"": ""quark-tailwind"",
   ""private"": true,
   ""devDependencies"": {
-    ""@tailwindcss/cli"": ""^4.0.0"",
-    ""tailwindcss"": ""^4.0.0"",
+    ""@tailwindcss/cli"": ""^4.2.1"",
+    ""tailwindcss"": ""^4.2.1"",
     ""tw-animate-css"": ""^1.4.0""
   }
 }
