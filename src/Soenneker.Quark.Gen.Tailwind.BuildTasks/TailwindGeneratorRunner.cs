@@ -551,7 +551,7 @@ module.exports = {
   ""devDependencies"": {
     ""@tailwindcss/cli"": ""^4.0.0"",
     ""tailwindcss"": ""^4.0.0"",
-    ""tw-animate-css"": ""^1.0.0""
+    ""tw-animate-css"": ""^1.4.0""
   }
 }
 ";
