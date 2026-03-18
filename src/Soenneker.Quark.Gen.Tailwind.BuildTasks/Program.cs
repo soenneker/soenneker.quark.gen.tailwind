@@ -32,7 +32,7 @@ public sealed class Program
         }
         catch (Exception e)
         {
-            Console.Error.WriteLine($"Stopped program because of exception: {e}");
+            await Console.Error.WriteLineAsync($"Stopped program because of exception: {e}");
             throw;
         }
         finally
