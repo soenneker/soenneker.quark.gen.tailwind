@@ -2,16 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Text;
-using System.Text.RegularExpressions;
+using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using Microsoft.Extensions.Logging;
 using Soenneker.Node.Util.Abstract;
 using Soenneker.Quark.Gen.Tailwind.BuildTasks.Abstract;
-using Soenneker.Extensions.String;
-using Soenneker.Extensions.Task;
-using Soenneker.Extensions.ValueTask;
 using Soenneker.Utils.Directory.Abstract;
 using Soenneker.Utils.File.Abstract;
 
@@ -22,24 +20,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 {
     private const string _tailwindDirName = "tailwind";
     private const string _inlineGeneratedTxtFileName = "tw-inline.generated.txt";
-
-    // Regexes for GenerateInlineSourcesFromCsFiles ([TailwindPrefix] + self-referencing Chain properties)
-    private static readonly Regex ClassWithAttrRegex = new(
-        @"\[(?<attr>[^\]]*TailwindPrefix[^\]]*)\]\s*" +
-        @"(?:(?:public|internal|private|protected)\s+)?(?:sealed\s+)?class\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\b(?<after>[^{]*)\{",
-        RegexOptions.Compiled | RegexOptions.Singleline);
-
-    private static readonly Regex TailwindPrefixArgsRegex = new(
-        @"TailwindPrefix\s*\(\s*""(?<prefix>[^""]+)""(?:\s*,\s*Responsive\s*=\s*(?<resp>true|false))?\s*\)",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
-
-    private static readonly Regex ChainPropRegex = new(
-        @"public\s+(?<type>[A-Za-z_][A-Za-z0-9_]*)\s+(?<prop>[A-Za-z_][A-Za-z0-9_]*)\s*=>\s*Chain\s*\(\s*(?<arg>[^)]+)\)\s*;",
-        RegexOptions.Compiled | RegexOptions.Singleline);
-
-    private static readonly Regex ChainBpPropRegex = new(
-        @"public\s+(?<type>[A-Za-z_][A-Za-z0-9_]*)\s+On[A-Za-z0-9_]+\s*=>\s*ChainBp\s*\(\s*BreakpointType\.(?<bp>[A-Za-z0-9_]+)\s*\)\s*;",
-        RegexOptions.Compiled | RegexOptions.Singleline);
+    private const string _suitePackageId = "soenneker.quark.suite";
 
     private readonly ILogger<TailwindGeneratorRunner> _logger;
     private readonly INodeUtil _nodeUtil;
@@ -59,51 +40,35 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         string[] args = Environment.GetCommandLineArgs();
         Dictionary<string, string> map = ParseArgs(args);
 
-        if (!map.TryGetValue("--projectDir", out string? projectDir) || projectDir.IsNullOrWhiteSpace())
+        if (!map.TryGetValue("--projectDir", out string? projectDir) || string.IsNullOrWhiteSpace(projectDir))
             return Fail("Missing required --projectDir");
 
         projectDir = Path.GetFullPath(projectDir.Trim()
                                                 .Trim('"'));
 
-        var sourceRoots = new List<string> { projectDir };
-        if (map.TryGetValue("--sourceDirs", out string? sourceDirs) && !sourceDirs.IsNullOrWhiteSpace())
-        {
-            foreach (string dir in sourceDirs.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                if (dir.Length == 0)
-                    continue;
-                string full = Path.GetFullPath(dir.Trim()
-                                                  .Trim('"'));
-                if (!sourceRoots.Contains(full))
-                    sourceRoots.Add(full);
-            }
-        }
-
-        // Fallback: include parent of projectDir so we still find source when projectDir is e.g. an empty or wrong path.
-        string? projectParent = Path.GetDirectoryName(projectDir);
-        if (!string.IsNullOrEmpty(projectParent) && await _directoryUtil.Exists(projectParent, cancellationToken)
-                                                                        .NoSync() && !sourceRoots.Contains(projectParent))
-            sourceRoots.Add(projectParent);
-
-        Console.WriteLine($"TailwindGenerator: projectDir={projectDir}, sourceRoots={sourceRoots.Count}");
+        Console.WriteLine($"TailwindGenerator: projectDir={projectDir}");
 
         string tailwindDir = Path.Combine(projectDir, _tailwindDirName);
-        await _directoryUtil.Create(tailwindDir, log: false, cancellationToken)
-                            .NoSync();
+        await _directoryUtil.Create(tailwindDir, log: false, cancellationToken);
 
-        await EnsureInputCss(tailwindDir, cancellationToken)
-            .NoSync();
-        await GenerateInlineSourcesFromCsFiles(sourceRoots, tailwindDir, cancellationToken)
-            .NoSync();
-        await EnsureTailwindConfig(tailwindDir, cancellationToken)
-            .NoSync();
-        await EnsurePackageJson(tailwindDir, cancellationToken)
-            .NoSync();
+        string? manifestPath = await ResolveManifestPath(projectDir, map, cancellationToken);
+        if (string.IsNullOrWhiteSpace(manifestPath))
+        {
+            return Fail(
+                $"Unable to locate '{_inlineGeneratedTxtFileName}' from a Soenneker.Quark.Suite project/package. " +
+                "Reference Soenneker.Quark.Suite via ProjectReference or NuGet, or set --manifestPath explicitly.");
+        }
+
+        Console.WriteLine($"TailwindGenerator: using manifest={manifestPath}");
+        await CopyManifestToTailwindDir(manifestPath, tailwindDir, cancellationToken);
+
+        await EnsureInputCss(tailwindDir, cancellationToken);
+        await EnsureTailwindConfig(tailwindDir, cancellationToken);
+        await EnsurePackageJson(tailwindDir, cancellationToken);
 
         try
         {
-            await _nodeUtil.NpmInstall(tailwindDir, cleanInstall: false, skipIfUpToDate: true, cancellationToken: cancellationToken)
-                           .NoSync();
+            await _nodeUtil.NpmInstall(tailwindDir, cleanInstall: false, skipIfUpToDate: true, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -123,10 +88,8 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         }
 
         string? outputDir = Path.GetDirectoryName(outputCssFull);
-
         if (!string.IsNullOrEmpty(outputDir))
-            await _directoryUtil.Create(outputDir, log: false, cancellationToken)
-                                .NoSync();
+            await _directoryUtil.Create(outputDir, log: false, cancellationToken);
 
         // Pass path relative to tailwind dir so CLI writes to the correct file (avoids Windows absolute-path issues).
         string outputCssForCli = GetRelativePath(tailwindDir, outputCssFull);
@@ -134,8 +97,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         string inputCss = Path.Combine(tailwindDir, "input.css");
         string configPath = Path.Combine(tailwindDir, "tailwind.config.js");
 
-        int exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForCli, minify: false, cancellationToken)
-            .NoSync();
+        int exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForCli, minify: false, cancellationToken);
         if (exitCode != 0)
         {
             _logger.LogWarning("Tailwind CLI exited with code {ExitCode}. Ensure Node/npx and @tailwindcss/cli are available.", exitCode);
@@ -146,12 +108,10 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         string minOutputCssFull = Path.Combine(Path.GetDirectoryName(outputCssFull)!, "quark-tailwind.min.css");
         string? outputDirForMin = Path.GetDirectoryName(minOutputCssFull);
         if (!string.IsNullOrEmpty(outputDirForMin))
-            await _directoryUtil.Create(outputDirForMin, log: false, cancellationToken)
-                                .NoSync();
+            await _directoryUtil.Create(outputDirForMin, log: false, cancellationToken);
 
         string outputCssForMin = GetRelativePath(tailwindDir, minOutputCssFull);
-        exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForMin, minify: true, cancellationToken)
-            .NoSync();
+        exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForMin, minify: true, cancellationToken);
         if (exitCode != 0)
         {
             _logger.LogWarning("Tailwind CLI (minify) exited with code {ExitCode}. Full CSS was built; minified output may be missing.", exitCode);
@@ -166,198 +126,142 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         return rel.Replace('\\', '/');
     }
 
-    private static bool IsExcluded(string fullPath)
+    private async Task<string?> ResolveManifestPath(string projectDir, IReadOnlyDictionary<string, string> args, CancellationToken cancellationToken)
     {
-        string p = fullPath.Replace('\\', '/');
-        return p.Contains("/bin/", StringComparison.OrdinalIgnoreCase) || p.Contains("/obj/", StringComparison.OrdinalIgnoreCase) ||
-               p.Contains("/node_modules/", StringComparison.OrdinalIgnoreCase) || p.Contains("/.git/", StringComparison.OrdinalIgnoreCase) ||
-               p.Contains("/tailwind/", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string StripComments(string s)
-    {
-        s = Regex.Replace(s, @"/\*.*?\*/", "", RegexOptions.Singleline);
-        s = Regex.Replace(s, @"//.*?$", "", RegexOptions.Multiline);
-        return s;
-    }
-
-    private static string? TryGetClassBody(string text, int openBraceIndex)
-    {
-        int depth = 0;
-        for (int i = openBraceIndex; i < text.Length; i++)
+        if (args.TryGetValue("--manifestPath", out string? explicitManifestPath) && !string.IsNullOrWhiteSpace(explicitManifestPath))
         {
-            char c = text[i];
-            if (c == '{')
-                depth++;
-            else if (c == '}')
-            {
-                depth--;
-                if (depth == 0)
-                    return text.Substring(openBraceIndex + 1, i - openBraceIndex - 1);
-            }
+            string fullPath = Path.GetFullPath(explicitManifestPath.Trim().Trim('"'));
+            return await _fileUtil.Exists(fullPath, cancellationToken) ? fullPath : null;
+        }
+
+        string? projectReferenceManifest = await TryResolveManifestFromProjectReferences(projectDir, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(projectReferenceManifest))
+            return projectReferenceManifest;
+
+        string? packageManifest = TryResolveManifestFromPackages(projectDir);
+        if (!string.IsNullOrWhiteSpace(packageManifest))
+            return packageManifest;
+
+        return null;
+    }
+
+    private async Task<string?> TryResolveManifestFromProjectReferences(string projectDir, CancellationToken cancellationToken)
+    {
+        string? projectFilePath = GetProjectFilePath(projectDir);
+        if (string.IsNullOrWhiteSpace(projectFilePath))
+            return null;
+
+        XDocument document;
+        try
+        {
+            string xml = await _fileUtil.Read(projectFilePath, log: false, cancellationToken);
+            document = XDocument.Parse(xml, LoadOptions.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to inspect project references for {ProjectDir}", projectDir);
+            return null;
+        }
+
+        IEnumerable<string?> includes = document.Descendants()
+                                                .Where(element => element.Name.LocalName == "ProjectReference")
+                                                .Select(element => element.Attribute("Include")?.Value);
+
+        foreach (string? include in includes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (string.IsNullOrWhiteSpace(include))
+                continue;
+
+            string referencePath = Path.GetFullPath(Path.Combine(projectDir, include));
+            string? referenceDirectory = Path.GetDirectoryName(referencePath);
+            if (string.IsNullOrWhiteSpace(referenceDirectory))
+                continue;
+
+            string manifestPath = Path.Combine(referenceDirectory, _tailwindDirName, _inlineGeneratedTxtFileName);
+            if (await _fileUtil.Exists(manifestPath, cancellationToken))
+                return manifestPath;
         }
 
         return null;
     }
 
-    private static string? ParseToken(string arg, string propName)
+    private string? TryResolveManifestFromPackages(string projectDir)
     {
-        arg = arg.Trim();
-        if (arg.Length >= 2 && arg[0] == '"' && arg[^1] == '"')
-            return arg.Substring(1, arg.Length - 2);
-        if (arg.Contains('.', StringComparison.Ordinal))
+        string assetsPath = Path.Combine(projectDir, "obj", "project.assets.json");
+        if (!File.Exists(assetsPath))
+            return null;
+
+        try
         {
-            string lower = propName.ToLowerInvariant();
-            if (lower is "inherit" or "initial" or "unset")
-                return lower;
-            return lower;
+            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(assetsPath));
+
+            if (!document.RootElement.TryGetProperty("libraries", out JsonElement libraries) ||
+                !document.RootElement.TryGetProperty("packageFolders", out JsonElement packageFolders))
+            {
+                return null;
+            }
+
+            string[] suiteLibraries = libraries.EnumerateObject()
+                                             .Select(property => property.Name)
+                                             .Where(name => name.StartsWith(_suitePackageId + "/", StringComparison.OrdinalIgnoreCase))
+                                             .ToArray();
+
+            if (suiteLibraries.Length == 0)
+                return null;
+
+            string[] folders = packageFolders.EnumerateObject()
+                                             .Select(property => property.Name.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+                                             .ToArray();
+
+            foreach (string library in suiteLibraries)
+            {
+                int separatorIndex = library.IndexOf('/');
+                if (separatorIndex < 0 || separatorIndex == library.Length - 1)
+                    continue;
+
+                string version = library.Substring(separatorIndex + 1);
+
+                foreach (string folder in folders)
+                {
+                    string manifestPath = Path.Combine(folder, _suitePackageId, version, _tailwindDirName, _inlineGeneratedTxtFileName);
+                    if (File.Exists(manifestPath))
+                        return manifestPath;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to inspect package assets for {ProjectDir}", projectDir);
         }
 
-        return propName.ToLowerInvariant();
+        return null;
     }
 
-    private async Task GenerateInlineSourcesFromCsFiles(IEnumerable<string> sourceRoots, string tailwindDir, CancellationToken cancellationToken)
+    private static string? GetProjectFilePath(string projectDir)
     {
-        // Output: tailwind/tw-inline.generated.txt (class names for @source to scan)
-        string outPath = Path.Combine(tailwindDir, _inlineGeneratedTxtFileName);
+        string[] projectFiles = Directory.GetFiles(projectDir, "*.csproj", SearchOption.TopDirectoryOnly);
+        if (projectFiles.Length == 0)
+            return null;
 
-        var uniqueLines = new HashSet<string>(StringComparer.Ordinal);
-        int totalFilesScanned = 0;
-        int tailwindPrefixClasses = 0;
+        if (projectFiles.Length == 1)
+            return projectFiles[0];
 
-        foreach (string sourceRoot in sourceRoots)
-        {
-            if (!await _directoryUtil.Exists(sourceRoot, cancellationToken)
-                                     .NoSync())
-            {
-                Console.WriteLine($"TailwindGenerator [inline]: skipping missing source root: {sourceRoot}");
-                continue;
-            }
+        string directoryName = Path.GetFileName(projectDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return projectFiles.FirstOrDefault(path => string.Equals(Path.GetFileNameWithoutExtension(path), directoryName, StringComparison.OrdinalIgnoreCase))
+               ?? projectFiles[0];
+    }
 
-            Console.WriteLine($"TailwindGenerator [inline]: scanning source root: {sourceRoot}");
-            List<string> csFiles = await _directoryUtil.GetFilesByExtension(sourceRoot, ".cs", recursive: true, cancellationToken)
-                                                       .NoSync();
-            foreach (string file in csFiles)
-            {
-                if (IsExcluded(file))
-                    continue;
-                totalFilesScanned++;
-                cancellationToken.ThrowIfCancellationRequested();
+    private async Task CopyManifestToTailwindDir(string manifestPath, string tailwindDir, CancellationToken cancellationToken)
+    {
+        string destinationPath = Path.Combine(tailwindDir, _inlineGeneratedTxtFileName);
 
-                string text;
-                try
-                {
-                    text = await _fileUtil.Read(file, log: false, cancellationToken)
-                                          .NoSync();
-                }
-                catch
-                {
-                    continue;
-                }
+        if (string.Equals(Path.GetFullPath(manifestPath), Path.GetFullPath(destinationPath), StringComparison.OrdinalIgnoreCase))
+            return;
 
-                text = StripComments(text);
-
-                foreach (Match m in ClassWithAttrRegex.Matches(text))
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    string attrBlob = m.Groups["attr"].Value;
-                    var am = TailwindPrefixArgsRegex.Match(attrBlob);
-                    if (!am.Success)
-                        continue;
-
-                    string prefix = am.Groups["prefix"].Value;
-                    bool responsive = true;
-                    if (am.Groups["resp"].Success && bool.TryParse(am.Groups["resp"].Value, out bool r))
-                        responsive = r;
-
-                    string className = m.Groups["name"].Value;
-
-                    // Find body
-                    int braceIdx = m.Index + m.Length - 1; // position of the '{' matched by regex
-                    string? body = TryGetClassBody(text, braceIdx);
-                    if (body is null)
-                        continue;
-
-                    // Collect tokens from Chain(...) properties that return the same type as the class
-                    var tokens = new HashSet<string>(StringComparer.Ordinal);
-
-                    foreach (Match pm in ChainPropRegex.Matches(body))
-                    {
-                        string typeName = pm.Groups["type"].Value;
-                        if (!string.Equals(typeName, className, StringComparison.Ordinal))
-                            continue;
-
-                        string prop = pm.Groups["prop"].Value;
-                        string arg = pm.Groups["arg"].Value;
-
-                        string? token = ParseToken(arg, prop);
-                        if (!string.IsNullOrWhiteSpace(token))
-                            tokens.Add(token);
-                    }
-
-                    if (tokens.Count == 0)
-                        continue;
-
-                    // If responsive=true but class doesn't even expose breakpoint properties, still fine:
-                    // it just generates responsive variants proactively.
-                    // if (responsive && !ChainBpPropRegex.IsMatch(body)) responsive = false;
-
-                    var tokenList = new List<string>(tokens);
-                    tokenList.Sort(StringComparer.Ordinal);
-                    int added = 0;
-                    if (responsive)
-                    {
-                        foreach (string bp in new[] { "", "sm:", "md:", "lg:", "xl:", "2xl:" })
-                        {
-                            foreach (string token in tokenList)
-                            {
-                                uniqueLines.Add(bp + prefix + token);
-                                added++;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        foreach (string token in tokenList)
-                        {
-                            uniqueLines.Add(prefix + token);
-                            added++;
-                        }
-                    }
-
-                    tailwindPrefixClasses += added;
-                    Console.WriteLine(
-                        $"TailwindGenerator [inline]: [TailwindPrefix] {file} -> class {className}, prefix=\"{prefix}\", responsive={responsive}, tokens=[{string.Join(", ", tokenList)}], lines added={added}");
-                }
-            }
-        }
-
-        // Deterministic output
-        var final = new List<string>(uniqueLines);
-        final.Sort(StringComparer.Ordinal);
-
-        Console.WriteLine(
-            $"TailwindGenerator [inline]: summary: {totalFilesScanned} .cs files scanned, {final.Count} class names (TailwindPrefix={tailwindPrefixClasses})");
-        Console.WriteLine($"TailwindGenerator [inline]: output -> {outPath}");
-        if (final.Count > 0)
-        {
-            int sample = Math.Min(15, final.Count);
-            var sampleList = new List<string>(sample);
-            for (int i = 0; i < sample; i++)
-                sampleList.Add(final[i]);
-            Console.WriteLine($"TailwindGenerator [inline]: sample classes: [{string.Join(", ", sampleList)}]");
-        }
-
-        var sb = new StringBuilder(4096);
-        sb.AppendLine("# Auto-generated by Soenneker.Quark.Gen.Tailwind.BuildTasks");
-        sb.AppendLine("# Do not edit manually. Class names for Tailwind @source to scan.");
-
-        foreach (string line in final)
-            sb.AppendLine(line);
-
-        await _fileUtil.Write(outPath, sb.ToString(), cancellationToken: cancellationToken)
-                       .NoSync();
+        string contents = await _fileUtil.Read(manifestPath, log: false, cancellationToken);
+        await _fileUtil.Write(destinationPath, contents, log: false, cancellationToken: cancellationToken);
     }
 
     private async ValueTask EnsureInputCss(string tailwindDir, CancellationToken cancellationToken)
@@ -500,14 +404,13 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
   }
 }
 ", true, cancellationToken)
-                       .NoSync();
+                       ;
     }
 
     private async ValueTask EnsureTailwindConfig(string tailwindDir, CancellationToken cancellationToken)
     {
         string path = Path.Combine(tailwindDir, "tailwind.config.js");
-        if (await _fileUtil.Exists(path, cancellationToken)
-                           .NoSync())
+        if (await _fileUtil.Exists(path, cancellationToken))
             return;
 
         const string content = @"/** @type {import('tailwindcss').Config} */
@@ -517,14 +420,13 @@ module.exports = {
 };
 ";
         await _fileUtil.Write(path, content, log: false, cancellationToken)
-                       .NoSync();
+                       ;
     }
 
     private async Task EnsurePackageJson(string tailwindDir, CancellationToken cancellationToken)
     {
         string path = Path.Combine(tailwindDir, "package.json");
-        if (await _fileUtil.Exists(path, cancellationToken)
-                           .NoSync())
+        if (await _fileUtil.Exists(path, cancellationToken))
             return;
 
         const string content = @"{
@@ -538,15 +440,14 @@ module.exports = {
 }
 ";
         await _fileUtil.Write(path, content, log: false, cancellationToken)
-                       .NoSync();
+                       ;
     }
 
     private async Task<int> RunTailwindCli(string workingDir, string configPath, string inputCss, string outputCssArg, bool minify,
         CancellationToken cancellationToken)
     {
         string inputFileName = Path.GetFileName(inputCss);
-        bool hasConfig = await _fileUtil.Exists(configPath, cancellationToken)
-                                        .NoSync();
+        bool hasConfig = await _fileUtil.Exists(configPath, cancellationToken);
         string? configFileName = hasConfig ? Path.GetFileName(configPath) : null;
 
         var argList = new List<string> { "@tailwindcss/cli" };
@@ -563,8 +464,7 @@ module.exports = {
         if (minify)
             argList.Add("--minify");
 
-        string npxPath = await _nodeUtil.GetNpxPath(cancellationToken)
-                                        .NoSync();
+        string npxPath = await _nodeUtil.GetNpxPath(cancellationToken);
         var psi = new ProcessStartInfo
         {
             FileName = npxPath,
@@ -599,9 +499,9 @@ module.exports = {
         {
             try
             {
-                int exit = await tcs.Task.NoSync();
-                string stdout = await outTask.NoSync();
-                string stderr = await errTask.NoSync();
+                int exit = await tcs.Task;
+                string stdout = await outTask;
+                string stderr = await errTask;
                 if (!string.IsNullOrEmpty(stdout))
                     Console.WriteLine(stdout);
                 if (!string.IsNullOrEmpty(stderr))

@@ -11,7 +11,7 @@
         <!-- ProjectReference: BuildTasks project output (e.g. bin/Debug or bin/Release) -->
         <_BuildTasksDir Condition="'$(_BuildTasksDir)'=='' and Exists('$(MSBuildThisFileDirectory)..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\Soenneker.Quark.Gen.Tailwind.BuildTasks.dll')">$(MSBuildThisFileDirectory)..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\</_BuildTasksDir>
         <BuildTasksDllPath Condition="'$(BuildTasksDllPath)'=='' and '$(_BuildTasksDir)'!=''">$(_BuildTasksDir)Soenneker.Quark.Gen.Tailwind.BuildTasks.dll</BuildTasksDllPath>
-        <!-- Opt-in: set TailwindGeneratorBuildEnabled=true in projects that should generate quark-tailwind.css (e.g. Soenneker.Quark.Suite). -->
+        <!-- Opt-in: set TailwindGeneratorBuildEnabled=true in projects that should generate quark-tailwind.css (e.g. an app that consumes Soenneker.Quark.Suite). -->
         <TailwindGeneratorBuildEnabled Condition="'$(TailwindGeneratorBuildEnabled)'==''">false</TailwindGeneratorBuildEnabled>
         <!-- ProjectDir with no trailing backslash for reliable Exec quoting. Fallback to MSBuildProjectDirectory when ProjectDir is empty (e.g. when building the package project itself). -->
         <_TailwindProjectDir>$([System.IO.Path]::GetDirectoryName('$(ProjectDir)x'))</_TailwindProjectDir>
@@ -20,6 +20,7 @@
         <TailwindOutput Condition="'$(TailwindOutput)' == ''">$(_TailwindProjectDir)\wwwroot\css\quark-tailwind.css</TailwindOutput>
         <TailwindMinOutput Condition="'$(TailwindMinOutput)' == ''">$([System.IO.Path]::Combine($([System.IO.Path]::GetDirectoryName('$(TailwindOutput)')), 'quark-tailwind.min.css'))</TailwindMinOutput>
         <_TailwindOutputArg Condition="'$(TailwindOutput)' != ''"> --tailwindOutput &quot;$(TailwindOutput)&quot;</_TailwindOutputArg>
+        <_TailwindManifestArg Condition="'$(TailwindManifestPath)' != ''"> --manifestPath &quot;$(TailwindManifestPath)&quot;</_TailwindManifestArg>
     </PropertyGroup>
 
     <!-- Runs before Build so generated CSS exists and can be included in Content for copy to output. -->
@@ -40,7 +41,7 @@
               ConsoleToMSBuild="true"
               StandardOutputImportance="high"
               StandardErrorImportance="high"
-              Command='dotnet exec &quot;$(BuildTasksDllPath)&quot; --projectDir &quot;$(_TailwindProjectDir)&quot;$(_TailwindOutputArg)' />
+              Command='dotnet exec &quot;$(BuildTasksDllPath)&quot; --projectDir &quot;$(_TailwindProjectDir)&quot;$(_TailwindOutputArg)$(_TailwindManifestArg)' />
     </Target>
 
     <!-- Copy generated Tailwind CSS to build output (Content pipeline may run before our target). -->
