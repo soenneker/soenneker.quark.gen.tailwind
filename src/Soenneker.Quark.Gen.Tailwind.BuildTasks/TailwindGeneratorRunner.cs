@@ -61,9 +61,9 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         }
 
         Console.WriteLine($"TailwindGenerator: using manifest={manifestPath}");
-        await CopyManifestToTailwindDir(manifestPath, tailwindDir, cancellationToken);
 
-        await EnsureInputCss(tailwindDir, cancellationToken);
+        string manifestPathForCss = GetRelativePath(tailwindDir, manifestPath);
+        await EnsureInputCss(tailwindDir, manifestPathForCss, cancellationToken);
         await EnsureTailwindConfig(tailwindDir, cancellationToken);
         await EnsurePackageJson(tailwindDir, cancellationToken);
 
@@ -254,29 +254,16 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                ?? projectFiles[0];
     }
 
-    private async Task CopyManifestToTailwindDir(string manifestPath, string tailwindDir, CancellationToken cancellationToken)
-    {
-        string destinationPath = Path.Combine(tailwindDir, _inlineGeneratedTxtFileName);
-
-        if (string.Equals(Path.GetFullPath(manifestPath), Path.GetFullPath(destinationPath), StringComparison.OrdinalIgnoreCase))
-            return;
-
-        string contents = await _fileUtil.Read(manifestPath, log: false, cancellationToken);
-        await _fileUtil.Write(destinationPath, contents, log: false, cancellationToken: cancellationToken);
-    }
-
-    private async ValueTask EnsureInputCss(string tailwindDir, CancellationToken cancellationToken)
+    private async ValueTask EnsureInputCss(string tailwindDir, string manifestPathForCss, CancellationToken cancellationToken)
     {
         string path = Path.Combine(tailwindDir, "input.css");
-        if (await _fileUtil.Exists(path, cancellationToken))
-            return;
+        string escapedManifestPath = manifestPathForCss.Replace("\"", "\\\"", StringComparison.Ordinal);
 
-        // Tailwind v4 syntax (v3 @tailwind directives are deprecated and can cause no output or errors).
-        await _fileUtil.Write(path, @"@import ""tailwindcss"";
+        string contents = @"@import ""tailwindcss"";
 @import ""tw-animate-css"";
 
-/* [TailwindPrefix] class names - Tailwind scans this file via @source */
-@source ""./tw-inline.generated.txt"";
+/* Quark Suite manifest generated in the referenced project/package */
+@source ""__QUARK_MANIFEST_PATH__"";
 
 /* Scan everything one level up */
 @source ""../**/*.{razor,cshtml,html,cs}""; 
@@ -404,7 +391,18 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     @apply bg-background text-foreground;
   }
 }
-", true, cancellationToken)
+";
+        contents = contents.Replace("__QUARK_MANIFEST_PATH__", escapedManifestPath, StringComparison.Ordinal);
+
+        if (await _fileUtil.Exists(path, cancellationToken))
+        {
+            string existing = await _fileUtil.Read(path, log: false, cancellationToken);
+            if (string.Equals(existing, contents, StringComparison.Ordinal))
+                return;
+        }
+
+        // Tailwind v4 syntax (v3 @tailwind directives are deprecated and can cause no output or errors).
+        await _fileUtil.Write(path, contents, true, cancellationToken)
                        ;
     }
 
