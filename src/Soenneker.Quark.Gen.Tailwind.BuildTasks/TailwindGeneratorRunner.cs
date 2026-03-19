@@ -20,6 +20,7 @@ namespace Soenneker.Quark.Gen.Tailwind.BuildTasks;
 public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 {
     private const string _tailwindDirName = "tailwind";
+    private const string _intermediateTailwindDir = "obj\\quark\\tailwind";
     private const string _inlineGeneratedTxtFileName = "tw-inline.generated.txt";
     private const string _suitePackageId = "soenneker.quark.suite";
 
@@ -49,7 +50,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
         Console.WriteLine($"TailwindGenerator: projectDir={projectDir}");
 
-        string tailwindDir = Path.Combine(projectDir, _tailwindDirName);
+        string tailwindDir = Path.Combine(projectDir, _intermediateTailwindDir);
         await _directoryUtil.Create(tailwindDir, log: false, cancellationToken);
 
         string? manifestPath = await ResolveManifestPath(projectDir, map, cancellationToken);
@@ -61,9 +62,10 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         }
 
         Console.WriteLine($"TailwindGenerator: using manifest={manifestPath}");
+        await CopyManifestToTailwindDir(manifestPath, tailwindDir, cancellationToken);
 
-        string manifestPathForCss = GetRelativePath(tailwindDir, manifestPath);
-        await EnsureInputCss(tailwindDir, manifestPathForCss, cancellationToken);
+        string projectRootForCss = GetRelativePath(tailwindDir, projectDir);
+        await EnsureInputCss(tailwindDir, projectRootForCss, cancellationToken);
         await EnsureTailwindConfig(tailwindDir, cancellationToken);
         await EnsurePackageJson(tailwindDir, cancellationToken);
 
@@ -226,9 +228,15 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
                 foreach (string folder in folders)
                 {
-                    string manifestPath = Path.Combine(folder, _suitePackageId, version, _tailwindDirName, _inlineGeneratedTxtFileName);
-                    if (File.Exists(manifestPath))
-                        return manifestPath;
+                    string contentFilesManifestPath = Path.Combine(folder, _suitePackageId, version, "contentFiles", "any", "any", "tailwind",
+                        _inlineGeneratedTxtFileName);
+
+                    if (File.Exists(contentFilesManifestPath))
+                        return contentFilesManifestPath;
+
+                    string legacyManifestPath = Path.Combine(folder, _suitePackageId, version, _tailwindDirName, _inlineGeneratedTxtFileName);
+                    if (File.Exists(legacyManifestPath))
+                        return legacyManifestPath;
                 }
             }
         }
@@ -254,22 +262,33 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                ?? projectFiles[0];
     }
 
-    private async ValueTask EnsureInputCss(string tailwindDir, string manifestPathForCss, CancellationToken cancellationToken)
+    private async Task CopyManifestToTailwindDir(string manifestPath, string tailwindDir, CancellationToken cancellationToken)
+    {
+        string destinationPath = Path.Combine(tailwindDir, _inlineGeneratedTxtFileName);
+
+        if (string.Equals(Path.GetFullPath(manifestPath), Path.GetFullPath(destinationPath), StringComparison.OrdinalIgnoreCase))
+            return;
+
+        string contents = await _fileUtil.Read(manifestPath, log: false, cancellationToken);
+        await _fileUtil.Write(destinationPath, contents, log: false, cancellationToken: cancellationToken);
+    }
+
+    private async ValueTask EnsureInputCss(string tailwindDir, string projectRootForCss, CancellationToken cancellationToken)
     {
         string path = Path.Combine(tailwindDir, "input.css");
-        string escapedManifestPath = manifestPathForCss.Replace("\"", "\\\"", StringComparison.Ordinal);
+        string escapedProjectRoot = projectRootForCss.Replace("\"", "\\\"", StringComparison.Ordinal);
 
         string contents = @"@import ""tailwindcss"";
 @import ""tw-animate-css"";
 
-/* Quark Suite manifest generated in the referenced project/package */
-@source ""__QUARK_MANIFEST_PATH__"";
+/* Quark Suite manifest staged locally for Tailwind */
+@source ""./tw-inline.generated.txt"";
 
-/* Scan everything one level up */
-@source ""../**/*.{razor,cshtml,html,cs}""; 
+/* Scan project sources from the consumer project root */
+@source ""__QUARK_PROJECT_ROOT__/**/*.{razor,cshtml,html,cs}"";
 
 /* Exclude junk */
-@source not ""../**/{bin,obj,node_modules,.git}/**"";
+@source not ""__QUARK_PROJECT_ROOT__/**/{bin,obj,node_modules,.git}/**"";
 
 @custom-variant dark (&:is(.dark *));
  
@@ -392,7 +411,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
   }
 }
 ";
-        contents = contents.Replace("__QUARK_MANIFEST_PATH__", escapedManifestPath, StringComparison.Ordinal);
+        contents = contents.Replace("__QUARK_PROJECT_ROOT__", escapedProjectRoot, StringComparison.Ordinal);
 
         if (await _fileUtil.Exists(path, cancellationToken))
         {
