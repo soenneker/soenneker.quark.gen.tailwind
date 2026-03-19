@@ -12,6 +12,7 @@ using Soenneker.Node.Util.Abstract;
 using Soenneker.Quark.Gen.Tailwind.BuildTasks.Abstract;
 using Soenneker.Utils.Directory.Abstract;
 using Soenneker.Utils.File.Abstract;
+using Soenneker.Extensions.String;
 
 namespace Soenneker.Quark.Gen.Tailwind.BuildTasks;
 
@@ -176,7 +177,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
             string referencePath = Path.GetFullPath(Path.Combine(projectDir, include));
             string? referenceDirectory = Path.GetDirectoryName(referencePath);
-            if (string.IsNullOrWhiteSpace(referenceDirectory))
+            if (referenceDirectory.IsNullOrWhiteSpace())
                 continue;
 
             string manifestPath = Path.Combine(referenceDirectory, _tailwindDirName, _inlineGeneratedTxtFileName);
