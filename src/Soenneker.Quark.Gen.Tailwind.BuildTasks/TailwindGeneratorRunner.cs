@@ -20,7 +20,7 @@ namespace Soenneker.Quark.Gen.Tailwind.BuildTasks;
 public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 {
     private const string _tailwindDirName = "tailwind";
-    private const string _intermediateTailwindDir = "obj\\quark\\tailwind";
+    private static readonly string _intermediateTailwindDir = Path.Combine("obj", "quark", "tailwind");
     private const string _inlineGeneratedTxtFileName = "tw-inline.generated.txt";
     private const string _suitePackageId = "soenneker.quark.suite";
 
