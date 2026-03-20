@@ -49,6 +49,7 @@ public sealed class Program
             {
                 logging.ClearProviders();
                 logging.AddConsole();
+                logging.SetMinimumLevel(LogLevel.Trace);
             })
             .ConfigureServices((_, services) =>
             {
@@ -61,4 +62,5 @@ public sealed class Program
         eventArgs.Cancel = true;
         _cts?.Cancel();
     }
+
 }

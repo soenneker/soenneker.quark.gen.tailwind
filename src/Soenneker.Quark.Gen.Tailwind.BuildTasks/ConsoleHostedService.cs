@@ -37,10 +37,7 @@ public sealed class ConsoleHostedService : IHostedService
                 }
                 catch (Exception e)
                 {
-                    var message = $"Soenneker.Quark.Gen.Tailwind.BuildTasks: Unhandled exception: {e}";
                     _logger.LogError(e, "Unhandled exception");
-                    await Console.Error.WriteLineAsync(message);
-                    Console.WriteLine(message); // Also stdout so MSBuild log shows the reason
                     _exitCode = 1;
                 }
                 finally

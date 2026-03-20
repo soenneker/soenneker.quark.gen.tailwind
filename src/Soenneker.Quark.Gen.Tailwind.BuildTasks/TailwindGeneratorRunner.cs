@@ -49,7 +49,6 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                                                 .Trim('"'));
 
         _logger.LogInformation("Starting Tailwind generation for project {ProjectDir}.", projectDir);
-        Console.WriteLine($"TailwindGenerator: projectDir={projectDir}");
 
         string tailwindDir = Path.Combine(projectDir, _intermediateTailwindDir);
         _logger.LogInformation("Preparing Tailwind working directory at {TailwindDir}.", tailwindDir);
@@ -64,7 +63,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                 "Reference Soenneker.Quark.Suite via ProjectReference or NuGet, or set --manifestPath explicitly.");
         }
 
-        Console.WriteLine($"TailwindGenerator: using manifest={manifestPath}");
+        _logger.LogInformation("Using Tailwind manifest at {ManifestPath}.", manifestPath);
         _logger.LogInformation("Copying manifest from {ManifestPath} to {TailwindDir}.", manifestPath, tailwindDir);
         await CopyManifestToTailwindDir(manifestPath, tailwindDir, cancellationToken);
 
@@ -177,7 +176,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Failed to inspect project references for {ProjectDir}", projectDir);
+            _logger.LogInformation(ex, "Failed to inspect project references for {ProjectDir}", projectDir);
             return null;
         }
 
@@ -257,7 +256,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Failed to inspect package assets for {ProjectDir}", projectDir);
+            _logger.LogInformation(ex, "Failed to inspect package assets for {ProjectDir}", projectDir);
         }
 
         return null;
@@ -521,7 +520,7 @@ module.exports = {
         }
         catch (Exception e)
         {
-            await Console.Error.WriteLineAsync($"Failed to start Tailwind CLI: {e.Message}. Ensure Node is installed.");
+            Console.Error.WriteLine($"Failed to start Tailwind CLI: {e.Message}. Ensure Node is installed.");
             return 1;
         }
 
@@ -536,9 +535,9 @@ module.exports = {
                 string stdout = await outTask;
                 string stderr = await errTask;
                 if (!string.IsNullOrEmpty(stdout))
-                    Console.WriteLine(stdout);
+                    _logger.LogInformation("{TailwindStdout}", stdout.TrimEnd());
                 if (!string.IsNullOrEmpty(stderr))
-                    await Console.Error.WriteLineAsync(stderr);
+                    _logger.LogWarning("{TailwindStderr}", stderr.TrimEnd());
                 return exit;
             }
             catch (OperationCanceledException)
@@ -572,11 +571,11 @@ module.exports = {
         return map;
     }
 
-    private static int Fail(string message)
+    private int Fail(string message)
     {
         var line = $"Soenneker.Quark.Gen.Tailwind.BuildTasks: {message}";
         Console.Error.WriteLine(line);
-        Console.WriteLine(line); // Also stdout so MSBuild log shows the reason when Exec captures output
+        Console.WriteLine(line);
         return 1;
     }
 }
