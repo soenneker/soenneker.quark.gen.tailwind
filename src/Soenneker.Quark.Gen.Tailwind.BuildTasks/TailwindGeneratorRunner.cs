@@ -48,11 +48,14 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         projectDir = Path.GetFullPath(projectDir.Trim()
                                                 .Trim('"'));
 
+        _logger.LogInformation("Starting Tailwind generation for project {ProjectDir}.", projectDir);
         Console.WriteLine($"TailwindGenerator: projectDir={projectDir}");
 
         string tailwindDir = Path.Combine(projectDir, _intermediateTailwindDir);
+        _logger.LogInformation("Preparing Tailwind working directory at {TailwindDir}.", tailwindDir);
         await _directoryUtil.Create(tailwindDir, log: false, cancellationToken);
 
+        _logger.LogInformation("Resolving Tailwind manifest path...");
         string? manifestPath = await ResolveManifestPath(projectDir, map, cancellationToken);
         if (string.IsNullOrWhiteSpace(manifestPath))
         {
@@ -62,15 +65,18 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         }
 
         Console.WriteLine($"TailwindGenerator: using manifest={manifestPath}");
+        _logger.LogInformation("Copying manifest from {ManifestPath} to {TailwindDir}.", manifestPath, tailwindDir);
         await CopyManifestToTailwindDir(manifestPath, tailwindDir, cancellationToken);
 
         string projectRootForCss = GetRelativePath(tailwindDir, projectDir);
+        _logger.LogInformation("Ensuring Tailwind input.css, config, and package metadata exist.");
         await EnsureInputCss(tailwindDir, projectRootForCss, cancellationToken);
         await EnsureTailwindConfig(tailwindDir, cancellationToken);
         await EnsurePackageJson(tailwindDir, cancellationToken);
 
         try
         {
+            _logger.LogInformation("Running npm install in {TailwindDir}.", tailwindDir);
             await _nodeUtil.NpmInstall(tailwindDir, cleanInstall: false, skipIfUpToDate: true, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
@@ -92,7 +98,10 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
         string? outputDir = Path.GetDirectoryName(outputCssFull);
         if (!string.IsNullOrEmpty(outputDir))
+        {
+            _logger.LogInformation("Ensuring Tailwind output directory exists at {OutputDir}.", outputDir);
             await _directoryUtil.Create(outputDir, log: false, cancellationToken);
+        }
 
         // Pass path relative to tailwind dir so CLI writes to the correct file (avoids Windows absolute-path issues).
         string outputCssForCli = GetRelativePath(tailwindDir, outputCssFull);
@@ -100,6 +109,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         string inputCss = Path.Combine(tailwindDir, "input.css");
         string configPath = Path.Combine(tailwindDir, "tailwind.config.js");
 
+        _logger.LogInformation("Running Tailwind CLI for full CSS output at {OutputCss}.", outputCssFull);
         int exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForCli, minify: false, cancellationToken);
         if (exitCode != 0)
         {
@@ -111,15 +121,20 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         string minOutputCssFull = Path.Combine(Path.GetDirectoryName(outputCssFull)!, "quark-tailwind.min.css");
         string? outputDirForMin = Path.GetDirectoryName(minOutputCssFull);
         if (!string.IsNullOrEmpty(outputDirForMin))
+        {
+            _logger.LogInformation("Ensuring Tailwind minified output directory exists at {OutputDir}.", outputDirForMin);
             await _directoryUtil.Create(outputDirForMin, log: false, cancellationToken);
+        }
 
         string outputCssForMin = GetRelativePath(tailwindDir, minOutputCssFull);
+        _logger.LogInformation("Running Tailwind CLI for minified CSS output at {MinOutputCss}.", minOutputCssFull);
         exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForMin, minify: true, cancellationToken);
         if (exitCode != 0)
         {
             _logger.LogWarning("Tailwind CLI (minify) exited with code {ExitCode}. Full CSS was built; minified output may be missing.", exitCode);
         }
 
+        _logger.LogInformation("Completed Tailwind generation for project {ProjectDir}.", projectDir);
         return 0;
     }
 
