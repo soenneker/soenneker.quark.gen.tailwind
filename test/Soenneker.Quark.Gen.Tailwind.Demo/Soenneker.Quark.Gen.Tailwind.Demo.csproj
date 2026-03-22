@@ -32,7 +32,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\..\soenneker.quark.suite\src\Soenneker.Quark.Suite.csproj" />
+        <ProjectReference Include="..\..\..\soenneker.quark.suite\src\Soenneker.Quark.Suite\Soenneker.Quark.Suite.csproj" />
     </ItemGroup>
 
 </Project>
