@@ -155,7 +155,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         if (!string.IsNullOrWhiteSpace(projectReferenceManifest))
             return projectReferenceManifest;
 
-        string? packageManifest = TryResolveManifestFromPackages(projectDir);
+        string? packageManifest = await TryResolveManifestFromPackages(projectDir, cancellationToken);
         if (!string.IsNullOrWhiteSpace(packageManifest))
             return packageManifest;
 
@@ -204,15 +204,16 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         return null;
     }
 
-    private string? TryResolveManifestFromPackages(string projectDir)
+    private async Task<string?> TryResolveManifestFromPackages(string projectDir, CancellationToken cancellationToken)
     {
         string assetsPath = Path.Combine(projectDir, "obj", "project.assets.json");
-        if (!File.Exists(assetsPath))
+        if (!await _fileUtil.Exists(assetsPath, cancellationToken))
             return null;
 
         try
         {
-            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(assetsPath));
+            string assetsJson = await _fileUtil.Read(assetsPath, log: false, cancellationToken);
+            using JsonDocument document = JsonDocument.Parse(assetsJson);
 
             if (!document.RootElement.TryGetProperty("libraries", out JsonElement libraries) ||
                 !document.RootElement.TryGetProperty("packageFolders", out JsonElement packageFolders))
@@ -245,11 +246,11 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                     string contentFilesManifestPath = Path.Combine(folder, _suitePackageId, version, "contentFiles", "any", "any", "tailwind",
                         _inlineGeneratedTxtFileName);
 
-                    if (File.Exists(contentFilesManifestPath))
+                    if (await _fileUtil.Exists(contentFilesManifestPath, cancellationToken))
                         return contentFilesManifestPath;
 
                     string legacyManifestPath = Path.Combine(folder, _suitePackageId, version, _tailwindDirName, _inlineGeneratedTxtFileName);
-                    if (File.Exists(legacyManifestPath))
+                    if (await _fileUtil.Exists(legacyManifestPath, cancellationToken))
                         return legacyManifestPath;
                 }
             }
