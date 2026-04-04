@@ -28,6 +28,7 @@
 
     <!-- Runs before Build so generated CSS exists and can be included in Content for copy to output. -->
     <Target Name="RunTailwindGeneratorBuildTasks"
+            AfterTargets="RunQuarkTailwindManifestGeneratorBuildTasks"
             BeforeTargets="Build"
             Condition="'$(DesignTimeBuild)'!='true' and '$(IsCrossTargetingBuild)'!='true' and '$(TailwindGeneratorBuildEnabled)'=='true'">
 

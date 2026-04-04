@@ -56,19 +56,25 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         _logger.LogInformation("Preparing Tailwind working directory at {TailwindDir}.", tailwindDir);
         await _directoryUtil.Create(tailwindDir, log: false, cancellationToken);
 
+        string projectManifestPath = Path.Combine(tailwindDir, _projectManifestFileName);
+        await EnsureLocalManifestFile(projectManifestPath, null,
+            "# Waiting for local project Tailwind manifest generation." + Environment.NewLine, cancellationToken);
+
+        _logger.LogInformation("Resolving upstream suite Tailwind manifest for local copy...");
+        string? suiteManifestPath = await ResolveManifestPath(projectDir, map, cancellationToken);
+        string localSuiteManifestPath = Path.Combine(tailwindDir, _suiteManifestFileName);
+        await EnsureLocalManifestFile(localSuiteManifestPath, suiteManifestPath,
+            "# No upstream Soenneker.Quark.Suite Tailwind manifest was resolved for this project." + Environment.NewLine, cancellationToken);
+
         string inputCss = Path.Combine(tailwindDir, _inputCssFileName);
         _logger.LogInformation("Ensuring Tailwind input.css, config, and package metadata exist.");
 
         if (!await _fileUtil.Exists(inputCss, cancellationToken))
         {
             _logger.LogInformation("Project Tailwind input.css not found. Creating starter file at {InputCssPath}.", inputCss);
-
-            _logger.LogInformation("Resolving Tailwind manifest path for starter input.css...");
-            string? manifestPath = await ResolveManifestPath(projectDir, map, cancellationToken);
-            string? projectManifestPath = await ResolveProjectManifestPath(projectDir, cancellationToken);
             string projectRootForCss = GetRelativePath(tailwindDir, projectDir);
 
-            await EnsureInputCss(inputCss, tailwindDir, projectRootForCss, manifestPath, projectManifestPath, cancellationToken);
+            await EnsureInputCss(inputCss, projectRootForCss, cancellationToken);
         }
         else
         {
@@ -164,6 +170,35 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             return packageManifest;
 
         return null;
+    }
+
+    private async ValueTask EnsureLocalManifestFile(string destinationPath, string? sourcePath, string placeholderContents,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(sourcePath))
+        {
+            string normalizedSourcePath = Path.GetFullPath(sourcePath.Trim().Trim('"'));
+
+            if (string.Equals(normalizedSourcePath, Path.GetFullPath(destinationPath), StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("Using local Tailwind manifest already present at {ManifestPath}.", destinationPath);
+                return;
+            }
+
+            if (await _fileUtil.Exists(normalizedSourcePath, cancellationToken))
+            {
+                string sourceContents = await _fileUtil.Read(normalizedSourcePath, log: false, cancellationToken);
+                await _fileUtil.Write(destinationPath, sourceContents, log: false, cancellationToken);
+                _logger.LogInformation("Copied Tailwind manifest from {SourcePath} to {DestinationPath}.", normalizedSourcePath, destinationPath);
+                return;
+            }
+        }
+
+        if (await _fileUtil.Exists(destinationPath, cancellationToken))
+            return;
+
+        await _fileUtil.Write(destinationPath, placeholderContents, log: false, cancellationToken);
+        _logger.LogInformation("Created placeholder Tailwind manifest at {ManifestPath}.", destinationPath);
     }
 
     private async Task<string?> TryResolveManifestFromProjectReferences(string projectDir, CancellationToken cancellationToken)
@@ -276,12 +311,6 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         return null;
     }
 
-    private async Task<string?> ResolveProjectManifestPath(string projectDir, CancellationToken cancellationToken)
-    {
-        string manifestPath = Path.Combine(projectDir, _tailwindDirName, _projectManifestFileName);
-        return await _fileUtil.Exists(manifestPath, cancellationToken) ? manifestPath : null;
-    }
-
     private static string? GetProjectFilePath(string projectDir)
     {
         string[] projectFiles = Directory.GetFiles(projectDir, "*.csproj", SearchOption.TopDirectoryOnly);
@@ -296,21 +325,10 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                ?? projectFiles[0];
     }
 
-    private async ValueTask EnsureInputCss(string inputCssPath, string tailwindDir, string projectRootForCss, string? upstreamManifestPath,
-        string? projectManifestPath, CancellationToken cancellationToken)
+    private async ValueTask EnsureInputCss(string inputCssPath, string projectRootForCss, CancellationToken cancellationToken)
     {
         string escapedProjectRoot = projectRootForCss.Replace("\"", "\\\"", StringComparison.Ordinal);
-        string? upstreamManifestSource = GetManifestSourcePath(tailwindDir, upstreamManifestPath);
-        string projectManifestSource = GetManifestSourcePath(tailwindDir, projectManifestPath) ?? $"./{_projectManifestFileName}";
-
-        var manifestSources = new List<string>(2);
-
-        if (!string.IsNullOrWhiteSpace(upstreamManifestSource))
-            manifestSources.Add($"@source \"{upstreamManifestSource}\";");
-
-        manifestSources.Add($"@source \"{projectManifestSource}\";");
-
-        string sourceBlock = string.Join(Environment.NewLine, manifestSources) + Environment.NewLine + Environment.NewLine;
+        string sourceBlock = $"@source \"./{_suiteManifestFileName}\";{Environment.NewLine}@source \"./{_projectManifestFileName}\";{Environment.NewLine}{Environment.NewLine}";
 
         string contents = @"@import ""tailwindcss"";
 @import ""tw-animate-css"";
@@ -448,15 +466,6 @@ __QUARK_MANIFEST_SOURCES__/* Scan project sources from the consumer project root
         // Tailwind v4 syntax (v3 @tailwind directives are deprecated and can cause no output or errors).
         await _fileUtil.Write(inputCssPath, contents, true, cancellationToken)
                        ;
-    }
-
-    private static string? GetManifestSourcePath(string tailwindDir, string? manifestPath)
-    {
-        if (string.IsNullOrWhiteSpace(manifestPath))
-            return null;
-
-        string relativePath = GetRelativePath(tailwindDir, manifestPath);
-        return relativePath.Replace("\"", "\\\"", StringComparison.Ordinal);
     }
 
     private async ValueTask EnsureTailwindConfig(string tailwindDir, CancellationToken cancellationToken)
