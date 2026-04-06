@@ -23,6 +23,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     private const string _inputCssFileName = "input.css";
     private const string _projectManifestFileName = "quark-tailwind-manifest.txt";
     private const string _suiteManifestFileName = "quark-suite-tailwind-manifest.txt";
+    private const string _generatedThemeFileName = "quark-theme.generated.css";
     private const string _legacyInlineGeneratedTxtFileName = "tw-inline.generated.txt";
     private const string _suitePackageId = "soenneker.quark.suite";
 
@@ -67,14 +68,16 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             "# No upstream Soenneker.Quark.Suite Tailwind manifest was resolved for this project." + Environment.NewLine, cancellationToken);
 
         string inputCss = Path.Combine(tailwindDir, _inputCssFileName);
+        string generatedThemeCssPath = Path.Combine(tailwindDir, _generatedThemeFileName);
         _logger.LogInformation("Ensuring Tailwind input.css, config, and package metadata exist.");
 
         if (!await _fileUtil.Exists(inputCss, cancellationToken))
         {
             _logger.LogInformation("Project Tailwind input.css not found. Creating starter file at {InputCssPath}.", inputCss);
             string projectRootForCss = GetRelativePath(tailwindDir, projectDir);
+            bool generatedThemeExists = await _fileUtil.Exists(generatedThemeCssPath, cancellationToken);
 
-            await EnsureInputCss(inputCss, projectRootForCss, cancellationToken);
+            await EnsureInputCss(inputCss, projectRootForCss, generatedThemeExists, cancellationToken);
         }
         else
         {
@@ -325,23 +328,44 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                ?? projectFiles[0];
     }
 
-    private async ValueTask EnsureInputCss(string inputCssPath, string projectRootForCss, CancellationToken cancellationToken)
+    private async ValueTask EnsureInputCss(string inputCssPath, string projectRootForCss, bool generatedThemeExists, CancellationToken cancellationToken)
     {
         string escapedProjectRoot = projectRootForCss.Replace("\"", "\\\"", StringComparison.Ordinal);
         string sourceBlock = $"@source \"./{_suiteManifestFileName}\";{Environment.NewLine}@source \"./{_projectManifestFileName}\";{Environment.NewLine}{Environment.NewLine}";
+        string themeBlock = generatedThemeExists ? $"@import \"./{_generatedThemeFileName}\";{Environment.NewLine}{Environment.NewLine}" : GetFallbackThemeBlock();
 
         string contents = @"@import ""tailwindcss"";
 @import ""tw-animate-css"";
 
-__QUARK_MANIFEST_SOURCES__/* Scan project sources from the consumer project root */
+__QUARK_THEME_BLOCK____QUARK_MANIFEST_SOURCES__/* Scan project sources from the consumer project root */
 @source ""__QUARK_PROJECT_ROOT__/**/*.{razor,cshtml,html,cs}"";
 
 /* Exclude junk */
 @source not ""__QUARK_PROJECT_ROOT__/**/{bin,obj,node_modules,.git}/**"";
 
 @custom-variant dark (&:is(.dark *));
- 
-:root {
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+";
+        contents = contents.Replace("__QUARK_THEME_BLOCK__", themeBlock, StringComparison.Ordinal)
+                           .Replace("__QUARK_MANIFEST_SOURCES__", sourceBlock, StringComparison.Ordinal)
+                           .Replace("__QUARK_PROJECT_ROOT__", escapedProjectRoot, StringComparison.Ordinal);
+
+        // Tailwind v4 syntax (v3 @tailwind directives are deprecated and can cause no output or errors).
+        await _fileUtil.Write(inputCssPath, contents, true, cancellationToken)
+                       ;
+    }
+
+    private static string GetFallbackThemeBlock()
+    {
+        return @":root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -376,7 +400,7 @@ __QUARK_MANIFEST_SOURCES__/* Scan project sources from the consumer project root
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
 }
- 
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -411,7 +435,7 @@ __QUARK_MANIFEST_SOURCES__/* Scan project sources from the consumer project root
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: oklch(0.439 0 0);
 }
- 
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -450,22 +474,8 @@ __QUARK_MANIFEST_SOURCES__/* Scan project sources from the consumer project root
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 }
- 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-}
-";
-        contents = contents.Replace("__QUARK_MANIFEST_SOURCES__", sourceBlock, StringComparison.Ordinal)
-                           .Replace("__QUARK_PROJECT_ROOT__", escapedProjectRoot, StringComparison.Ordinal);
 
-        // Tailwind v4 syntax (v3 @tailwind directives are deprecated and can cause no output or errors).
-        await _fileUtil.Write(inputCssPath, contents, true, cancellationToken)
-                       ;
+";
     }
 
     private async ValueTask EnsureTailwindConfig(string tailwindDir, CancellationToken cancellationToken)
