@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +13,8 @@ using Soenneker.Quark.Gen.Tailwind.BuildTasks.Abstract;
 using Soenneker.Utils.Directory.Abstract;
 using Soenneker.Utils.File.Abstract;
 using Soenneker.Extensions.String;
+using Soenneker.Extensions.ValueTask;
+using Soenneker.Hashing.XxHash;
 
 namespace Soenneker.Quark.Gen.Tailwind.BuildTasks;
 
@@ -59,8 +60,8 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         await _directoryUtil.Create(tailwindDir, log: false, cancellationToken);
 
         string projectManifestPath = Path.Combine(tailwindDir, _projectManifestFileName);
-        await EnsureLocalManifestFile(projectManifestPath, null,
-            "# Waiting for local project Tailwind manifest generation." + Environment.NewLine, cancellationToken);
+        await EnsureLocalManifestFile(projectManifestPath, null, "# Waiting for local project Tailwind manifest generation." + Environment.NewLine,
+            cancellationToken);
 
         _logger.LogInformation("Resolving upstream suite Tailwind manifest for local copy...");
         string? suiteManifestPath = await ResolveManifestPath(projectDir, map, cancellationToken);
@@ -191,7 +192,8 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     }
 
     private async ValueTask<string> ComputeInputHash(string projectDir, string tailwindDir, string projectManifestPath, string localSuiteManifestPath,
-        string inputCssPath, string generatedThemeCssPath, string configPath, string packageJsonPath, string packageLockPath, CancellationToken cancellationToken)
+        string inputCssPath, string generatedThemeCssPath, string configPath, string packageJsonPath, string packageLockPath,
+        CancellationToken cancellationToken)
     {
         var entries = new List<string>();
 
@@ -208,8 +210,10 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         await AddSpecificFileMetadata(entries, tailwindDir, packageJsonPath, "package-json", cancellationToken);
         await AddSpecificFileMetadata(entries, tailwindDir, packageLockPath, "package-lock", cancellationToken);
 
-        string assemblyLocation = GetType().Assembly.Location;
-        if (!string.IsNullOrWhiteSpace(assemblyLocation) && File.Exists(assemblyLocation))
+        string assemblyLocation = GetType()
+                                  .Assembly.Location;
+        if (!string.IsNullOrWhiteSpace(assemblyLocation) && await _fileUtil.Exists(assemblyLocation, cancellationToken)
+                                                                           .NoSync())
         {
             entries.Add(BuildMetadataEntry("buildtasks", assemblyLocation, assemblyLocation));
         }
@@ -217,13 +221,13 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         entries.Sort(StringComparer.Ordinal);
 
         string manifest = string.Join('\n', entries);
-        byte[] bytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(manifest));
-        return Convert.ToHexString(bytes);
+        return XxHash3Util.Hash(manifest);
     }
 
     private async ValueTask AddSourceMetadataEntries(List<string> entries, string projectDir, string extension, CancellationToken cancellationToken)
     {
-        List<string> files = await _directoryUtil.GetFilesByExtension(projectDir, extension, recursive: true, cancellationToken);
+        List<string> files = await _directoryUtil.GetFilesByExtension(projectDir, extension, recursive: true, cancellationToken)
+                                                 .NoSync();
 
         foreach (string file in files)
         {
@@ -238,7 +242,8 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
     private async ValueTask AddSpecificFileMetadata(List<string> entries, string rootDir, string filePath, string category, CancellationToken cancellationToken)
     {
-        if (!await _fileUtil.Exists(filePath, cancellationToken))
+        if (!await _fileUtil.Exists(filePath, cancellationToken)
+                            .NoSync())
             return;
 
         entries.Add(BuildMetadataEntry(rootDir, filePath, category));
@@ -247,20 +252,17 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     private static string BuildMetadataEntry(string rootDir, string filePath, string category)
     {
         var info = new FileInfo(filePath);
-        string relativePath = Path.GetRelativePath(rootDir, filePath).Replace('\\', '/');
+        string relativePath = Path.GetRelativePath(rootDir, filePath)
+                                  .Replace('\\', '/');
         return $"{category}|{relativePath}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
     }
 
     private static bool IsExcludedSourcePath(string path)
     {
-        return path.Contains("\\obj\\", StringComparison.OrdinalIgnoreCase) ||
-               path.Contains("/obj/", StringComparison.OrdinalIgnoreCase) ||
-               path.Contains("\\bin\\", StringComparison.OrdinalIgnoreCase) ||
-               path.Contains("/bin/", StringComparison.OrdinalIgnoreCase) ||
-               path.Contains("\\node_modules\\", StringComparison.OrdinalIgnoreCase) ||
-               path.Contains("/node_modules/", StringComparison.OrdinalIgnoreCase) ||
-               path.Contains("\\.git\\", StringComparison.OrdinalIgnoreCase) ||
-               path.Contains("/.git/", StringComparison.OrdinalIgnoreCase);
+        return path.Contains("\\obj\\", StringComparison.OrdinalIgnoreCase) || path.Contains("/obj/", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains("\\bin\\", StringComparison.OrdinalIgnoreCase) || path.Contains("/bin/", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains("\\node_modules\\", StringComparison.OrdinalIgnoreCase) || path.Contains("/node_modules/", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains("\\.git\\", StringComparison.OrdinalIgnoreCase) || path.Contains("/.git/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetRelativePath(string fromDir, string toPath)
@@ -273,7 +275,8 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     {
         if (args.TryGetValue("--manifestPath", out string? explicitManifestPath) && !string.IsNullOrWhiteSpace(explicitManifestPath))
         {
-            string fullPath = Path.GetFullPath(explicitManifestPath.Trim().Trim('"'));
+            string fullPath = Path.GetFullPath(explicitManifestPath.Trim()
+                                                                   .Trim('"'));
             return await _fileUtil.Exists(fullPath, cancellationToken) ? fullPath : null;
         }
 
@@ -288,12 +291,12 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         return null;
     }
 
-    private async ValueTask EnsureLocalManifestFile(string destinationPath, string? sourcePath, string placeholderContents,
-        CancellationToken cancellationToken)
+    private async ValueTask EnsureLocalManifestFile(string destinationPath, string? sourcePath, string placeholderContents, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(sourcePath))
         {
-            string normalizedSourcePath = Path.GetFullPath(sourcePath.Trim().Trim('"'));
+            string normalizedSourcePath = Path.GetFullPath(sourcePath.Trim()
+                                                                     .Trim('"'));
 
             if (string.Equals(normalizedSourcePath, Path.GetFullPath(destinationPath), StringComparison.OrdinalIgnoreCase))
             {
@@ -345,7 +348,8 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
         IEnumerable<string?> includes = document.Descendants()
                                                 .Where(element => element.Name.LocalName == "ProjectReference")
-                                                .Select(element => element.Attribute("Include")?.Value);
+                                                .Select(element => element.Attribute("Include")
+                                                                          ?.Value);
 
         foreach (string? include in includes)
         {
@@ -389,9 +393,9 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             }
 
             string[] suiteLibraries = libraries.EnumerateObject()
-                                             .Select(property => property.Name)
-                                             .Where(name => name.StartsWith(_suitePackageId + "/", StringComparison.OrdinalIgnoreCase))
-                                             .ToArray();
+                                               .Select(property => property.Name)
+                                               .Where(name => name.StartsWith(_suitePackageId + "/", StringComparison.OrdinalIgnoreCase))
+                                               .ToArray();
 
             if (suiteLibraries.Length == 0)
                 return null;
@@ -445,15 +449,18 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             return projectFiles[0];
 
         string directoryName = Path.GetFileName(projectDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        return projectFiles.FirstOrDefault(path => string.Equals(Path.GetFileNameWithoutExtension(path), directoryName, StringComparison.OrdinalIgnoreCase))
-               ?? projectFiles[0];
+        return projectFiles.FirstOrDefault(path => string.Equals(Path.GetFileNameWithoutExtension(path), directoryName, StringComparison.OrdinalIgnoreCase)) ??
+               projectFiles[0];
     }
 
     private async ValueTask EnsureInputCss(string inputCssPath, string projectRootForCss, bool generatedThemeExists, CancellationToken cancellationToken)
     {
         string escapedProjectRoot = projectRootForCss.Replace("\"", "\\\"", StringComparison.Ordinal);
-        string sourceBlock = $"@source \"./{_suiteManifestFileName}\";{Environment.NewLine}@source \"./{_projectManifestFileName}\";{Environment.NewLine}{Environment.NewLine}";
-        string themeBlock = generatedThemeExists ? $"@import \"./{_generatedThemeFileName}\";{Environment.NewLine}{Environment.NewLine}" : GetFallbackThemeBlock();
+        string sourceBlock =
+            $"@source \"./{_suiteManifestFileName}\";{Environment.NewLine}@source \"./{_projectManifestFileName}\";{Environment.NewLine}{Environment.NewLine}";
+        string themeBlock = generatedThemeExists
+            ? $"@import \"./{_generatedThemeFileName}\";{Environment.NewLine}{Environment.NewLine}"
+            : GetFallbackThemeBlock();
 
         string contents = @"@import ""tailwindcss"";
 @import ""tw-animate-css"";
@@ -480,8 +487,7 @@ __QUARK_THEME_BLOCK____QUARK_MANIFEST_SOURCES__/* Scan project sources from the 
                            .Replace("__QUARK_PROJECT_ROOT__", escapedProjectRoot, StringComparison.Ordinal);
 
         // Tailwind v4 syntax (v3 @tailwind directives are deprecated and can cause no output or errors).
-        await _fileUtil.Write(inputCssPath, contents, true, cancellationToken)
-                       ;
+        await _fileUtil.Write(inputCssPath, contents, true, cancellationToken);
     }
 
     private static string GetFallbackThemeBlock()
@@ -611,8 +617,7 @@ module.exports = {
   plugins: []
 };
 ";
-        await _fileUtil.Write(path, content, log: false, cancellationToken)
-                       ;
+        await _fileUtil.Write(path, content, log: false, cancellationToken);
     }
 
     private async Task EnsurePackageJson(string tailwindDir, CancellationToken cancellationToken)
@@ -631,8 +636,7 @@ module.exports = {
   }
 }
 ";
-        await _fileUtil.Write(path, content, log: false, cancellationToken)
-                       ;
+        await _fileUtil.Write(path, content, log: false, cancellationToken);
     }
 
     private async Task<int> RunTailwindCli(string workingDir, string configPath, string inputCss, string outputCssArg, bool minify,
