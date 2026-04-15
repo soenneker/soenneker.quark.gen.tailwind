@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -87,15 +88,10 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         await EnsureTailwindConfig(tailwindDir, cancellationToken);
         await EnsurePackageJson(tailwindDir, cancellationToken);
 
-        try
-        {
-            _logger.LogInformation("Running npm install in {TailwindDir}.", tailwindDir);
-            await _nodeUtil.NpmInstall(tailwindDir, cleanInstall: false, skipIfUpToDate: true, cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "npm install failed. Continuing with Tailwind CLI.");
-        }
+        string configPath = Path.Combine(tailwindDir, "tailwind.config.js");
+        string packageJsonPath = Path.Combine(tailwindDir, "package.json");
+        string packageLockPath = Path.Combine(tailwindDir, "package-lock.json");
+        string hashPath = Path.Combine(tailwindDir, "tailwind-generator.inputs.hash");
 
         // Resolve output path: prefer --tailwindOutput, else projectDir/wwwroot/css/quark-tailwind.css (no ambiguity).
         string outputCssFull;
@@ -116,10 +112,28 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             await _directoryUtil.Create(outputDir, log: false, cancellationToken);
         }
 
+        string minOutputCssFull = Path.Combine(Path.GetDirectoryName(outputCssFull)!, "quark-tailwind.min.css");
+        string inputHash = await ComputeInputHash(projectDir, tailwindDir, projectManifestPath, localSuiteManifestPath, inputCss, generatedThemeCssPath,
+            configPath, packageJsonPath, packageLockPath, cancellationToken);
+
+        if (await CanSkipGeneration(inputHash, hashPath, outputCssFull, minOutputCssFull, cancellationToken))
+        {
+            _logger.LogInformation("Tailwind inputs unchanged. Skipping npm install and Tailwind CLI for project {ProjectDir}.", projectDir);
+            return 0;
+        }
+
+        try
+        {
+            _logger.LogInformation("Running npm install in {TailwindDir}.", tailwindDir);
+            await _nodeUtil.NpmInstall(tailwindDir, cleanInstall: false, skipIfUpToDate: true, cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "npm install failed. Continuing with Tailwind CLI.");
+        }
+
         // Pass path relative to tailwind dir so CLI writes to the correct file (avoids Windows absolute-path issues).
         string outputCssForCli = GetRelativePath(tailwindDir, outputCssFull);
-
-        string configPath = Path.Combine(tailwindDir, "tailwind.config.js");
 
         _logger.LogInformation("Running Tailwind CLI for full CSS output at {OutputCss}.", outputCssFull);
         int exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForCli, minify: false, cancellationToken);
@@ -130,7 +144,6 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         }
 
         // Build minified version alongside (quark-tailwind.min.css in same directory).
-        string minOutputCssFull = Path.Combine(Path.GetDirectoryName(outputCssFull)!, "quark-tailwind.min.css");
         string? outputDirForMin = Path.GetDirectoryName(minOutputCssFull);
         if (!string.IsNullOrEmpty(outputDirForMin))
         {
@@ -146,8 +159,96 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             _logger.LogWarning("Tailwind CLI (minify) exited with code {ExitCode}. Full CSS was built; minified output may be missing.", exitCode);
         }
 
+        await _fileUtil.Write(hashPath, inputHash, log: false, cancellationToken);
         _logger.LogInformation("Completed Tailwind generation for project {ProjectDir}.", projectDir);
         return 0;
+    }
+
+    private async ValueTask<bool> CanSkipGeneration(string inputHash, string hashPath, string outputCssPath, string minOutputCssPath,
+        CancellationToken cancellationToken)
+    {
+        if (!await _fileUtil.Exists(outputCssPath, cancellationToken) ||
+            !await _fileUtil.Exists(minOutputCssPath, cancellationToken) ||
+            !await _fileUtil.Exists(hashPath, cancellationToken))
+        {
+            return false;
+        }
+
+        string? previousHash = await _fileUtil.TryRead(hashPath, log: false, cancellationToken);
+        return string.Equals(previousHash?.Trim(), inputHash, StringComparison.Ordinal);
+    }
+
+    private async ValueTask<string> ComputeInputHash(string projectDir, string tailwindDir, string projectManifestPath, string localSuiteManifestPath,
+        string inputCssPath, string generatedThemeCssPath, string configPath, string packageJsonPath, string packageLockPath, CancellationToken cancellationToken)
+    {
+        var entries = new List<string>();
+
+        await AddSourceMetadataEntries(entries, projectDir, ".cs", cancellationToken);
+        await AddSourceMetadataEntries(entries, projectDir, ".razor", cancellationToken);
+        await AddSourceMetadataEntries(entries, projectDir, ".cshtml", cancellationToken);
+        await AddSourceMetadataEntries(entries, projectDir, ".html", cancellationToken);
+
+        await AddSpecificFileMetadata(entries, tailwindDir, projectManifestPath, "manifest-project", cancellationToken);
+        await AddSpecificFileMetadata(entries, tailwindDir, localSuiteManifestPath, "manifest-suite", cancellationToken);
+        await AddSpecificFileMetadata(entries, tailwindDir, inputCssPath, "input-css", cancellationToken);
+        await AddSpecificFileMetadata(entries, tailwindDir, generatedThemeCssPath, "generated-theme", cancellationToken);
+        await AddSpecificFileMetadata(entries, tailwindDir, configPath, "tailwind-config", cancellationToken);
+        await AddSpecificFileMetadata(entries, tailwindDir, packageJsonPath, "package-json", cancellationToken);
+        await AddSpecificFileMetadata(entries, tailwindDir, packageLockPath, "package-lock", cancellationToken);
+
+        string assemblyLocation = GetType().Assembly.Location;
+        if (!string.IsNullOrWhiteSpace(assemblyLocation) && File.Exists(assemblyLocation))
+        {
+            entries.Add(BuildMetadataEntry("buildtasks", assemblyLocation, assemblyLocation));
+        }
+
+        entries.Sort(StringComparer.Ordinal);
+
+        string manifest = string.Join('\n', entries);
+        byte[] bytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(manifest));
+        return Convert.ToHexString(bytes);
+    }
+
+    private async ValueTask AddSourceMetadataEntries(List<string> entries, string projectDir, string extension, CancellationToken cancellationToken)
+    {
+        List<string> files = await _directoryUtil.GetFilesByExtension(projectDir, extension, recursive: true, cancellationToken);
+
+        foreach (string file in files)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (IsExcludedSourcePath(file))
+                continue;
+
+            entries.Add(BuildMetadataEntry(projectDir, file, extension));
+        }
+    }
+
+    private async ValueTask AddSpecificFileMetadata(List<string> entries, string rootDir, string filePath, string category, CancellationToken cancellationToken)
+    {
+        if (!await _fileUtil.Exists(filePath, cancellationToken))
+            return;
+
+        entries.Add(BuildMetadataEntry(rootDir, filePath, category));
+    }
+
+    private static string BuildMetadataEntry(string rootDir, string filePath, string category)
+    {
+        var info = new FileInfo(filePath);
+        string relativePath = Path.GetRelativePath(rootDir, filePath).Replace('\\', '/');
+        return $"{category}|{relativePath}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
+    }
+
+    private static bool IsExcludedSourcePath(string path)
+    {
+        return path.Contains("\\obj\\", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains("/obj/", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains("\\bin\\", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains("/bin/", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains("\\node_modules\\", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains("/node_modules/", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains("\\.git\\", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains("/.git/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetRelativePath(string fromDir, string toPath)
@@ -191,6 +292,14 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             if (await _fileUtil.Exists(normalizedSourcePath, cancellationToken))
             {
                 string sourceContents = await _fileUtil.Read(normalizedSourcePath, log: false, cancellationToken);
+                string? existingContents = await _fileUtil.TryRead(destinationPath, log: false, cancellationToken);
+
+                if (string.Equals(existingContents, sourceContents, StringComparison.Ordinal))
+                {
+                    _logger.LogInformation("Tailwind manifest at {DestinationPath} is already up-to-date.", destinationPath);
+                    return;
+                }
+
                 await _fileUtil.Write(destinationPath, sourceContents, log: false, cancellationToken);
                 _logger.LogInformation("Copied Tailwind manifest from {SourcePath} to {DestinationPath}.", normalizedSourcePath, destinationPath);
                 return;
