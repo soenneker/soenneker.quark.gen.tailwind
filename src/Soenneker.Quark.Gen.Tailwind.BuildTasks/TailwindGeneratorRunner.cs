@@ -167,15 +167,27 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     private async ValueTask<bool> CanSkipGeneration(string inputHash, string hashPath, string outputCssPath, string minOutputCssPath,
         CancellationToken cancellationToken)
     {
-        if (!await _fileUtil.Exists(outputCssPath, cancellationToken) ||
-            !await _fileUtil.Exists(minOutputCssPath, cancellationToken) ||
-            !await _fileUtil.Exists(hashPath, cancellationToken))
+        bool hasOutput = await _fileUtil.Exists(outputCssPath, cancellationToken);
+        bool hasMinOutput = await _fileUtil.Exists(minOutputCssPath, cancellationToken);
+        bool hasHash = await _fileUtil.Exists(hashPath, cancellationToken);
+
+        if (!hasOutput || !hasMinOutput || !hasHash)
         {
+            _logger.LogDebug("Tailwind cache miss because required files are missing. css={HasOutput} min={HasMinOutput} hash={HasHash}", hasOutput,
+                hasMinOutput, hasHash);
             return false;
         }
 
         string? previousHash = await _fileUtil.TryRead(hashPath, log: false, cancellationToken);
-        return string.Equals(previousHash?.Trim(), inputHash, StringComparison.Ordinal);
+        bool isMatch = string.Equals(previousHash?.Trim(), inputHash, StringComparison.Ordinal);
+
+        if (!isMatch)
+        {
+            _logger.LogDebug("Tailwind cache miss because the input hash changed. previous={PreviousHash} current={CurrentHash}", previousHash?.Trim(),
+                inputHash);
+        }
+
+        return isMatch;
     }
 
     private async ValueTask<string> ComputeInputHash(string projectDir, string tailwindDir, string projectManifestPath, string localSuiteManifestPath,
