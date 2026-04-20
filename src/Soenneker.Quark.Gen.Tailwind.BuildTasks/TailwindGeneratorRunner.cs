@@ -50,8 +50,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         if (!map.TryGetValue("--projectDir", out string? projectDir) || string.IsNullOrWhiteSpace(projectDir))
             return Fail("Missing required --projectDir");
 
-        projectDir = Path.GetFullPath(projectDir.Trim()
-                                                .Trim('"'));
+        projectDir = Path.GetFullPath(projectDir.Trim().Trim('"'));
 
         _logger.LogInformation("Starting Tailwind generation for project {ProjectDir}.", projectDir);
 
@@ -98,8 +97,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         string outputCssFull;
         if (map.TryGetValue("--tailwindOutput", out string? outPath) && !string.IsNullOrWhiteSpace(outPath))
         {
-            outputCssFull = Path.GetFullPath(outPath.Trim()
-                                                    .Trim('"'));
+            outputCssFull = Path.GetFullPath(outPath.Trim().Trim('"'));
         }
         else
         {
@@ -210,10 +208,8 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         await AddSpecificFileMetadata(entries, tailwindDir, packageJsonPath, "package-json", cancellationToken);
         await AddSpecificFileMetadata(entries, tailwindDir, packageLockPath, "package-lock", cancellationToken);
 
-        string assemblyLocation = GetType()
-                                  .Assembly.Location;
-        if (!string.IsNullOrWhiteSpace(assemblyLocation) && await _fileUtil.Exists(assemblyLocation, cancellationToken)
-                                                                           .NoSync())
+        string assemblyLocation = GetType().Assembly.Location;
+        if (!string.IsNullOrWhiteSpace(assemblyLocation) && await _fileUtil.Exists(assemblyLocation, cancellationToken).NoSync())
         {
             entries.Add(BuildMetadataEntry("buildtasks", assemblyLocation, assemblyLocation));
         }
@@ -226,8 +222,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
     private async ValueTask AddSourceMetadataEntries(List<string> entries, string projectDir, string extension, CancellationToken cancellationToken)
     {
-        List<string> files = await _directoryUtil.GetFilesByExtension(projectDir, extension, recursive: true, cancellationToken)
-                                                 .NoSync();
+        List<string> files = await _directoryUtil.GetFilesByExtension(projectDir, extension, recursive: true, cancellationToken).NoSync();
 
         foreach (string file in files)
         {
@@ -242,8 +237,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
     private async ValueTask AddSpecificFileMetadata(List<string> entries, string rootDir, string filePath, string category, CancellationToken cancellationToken)
     {
-        if (!await _fileUtil.Exists(filePath, cancellationToken)
-                            .NoSync())
+        if (!await _fileUtil.Exists(filePath, cancellationToken).NoSync())
             return;
 
         entries.Add(BuildMetadataEntry(rootDir, filePath, category));
@@ -252,8 +246,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     private static string BuildMetadataEntry(string rootDir, string filePath, string category)
     {
         var info = new FileInfo(filePath);
-        string relativePath = Path.GetRelativePath(rootDir, filePath)
-                                  .Replace('\\', '/');
+        string relativePath = Path.GetRelativePath(rootDir, filePath).Replace('\\', '/');
         return $"{category}|{relativePath}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
     }
 
@@ -275,8 +268,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     {
         if (args.TryGetValue("--manifestPath", out string? explicitManifestPath) && !string.IsNullOrWhiteSpace(explicitManifestPath))
         {
-            string fullPath = Path.GetFullPath(explicitManifestPath.Trim()
-                                                                   .Trim('"'));
+            string fullPath = Path.GetFullPath(explicitManifestPath.Trim().Trim('"'));
             return await _fileUtil.Exists(fullPath, cancellationToken) ? fullPath : null;
         }
 
@@ -295,8 +287,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     {
         if (!string.IsNullOrWhiteSpace(sourcePath))
         {
-            string normalizedSourcePath = Path.GetFullPath(sourcePath.Trim()
-                                                                     .Trim('"'));
+            string normalizedSourcePath = Path.GetFullPath(sourcePath.Trim().Trim('"'));
 
             if (string.Equals(normalizedSourcePath, Path.GetFullPath(destinationPath), StringComparison.OrdinalIgnoreCase))
             {
@@ -346,10 +337,8 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             return null;
         }
 
-        IEnumerable<string?> includes = document.Descendants()
-                                                .Where(element => element.Name.LocalName == "ProjectReference")
-                                                .Select(element => element.Attribute("Include")
-                                                                          ?.Value);
+        IEnumerable<string?> includes = document.Descendants().Where(element => element.Name.LocalName == "ProjectReference")
+                                                .Select(element => element.Attribute("Include")?.Value);
 
         foreach (string? include in includes)
         {
@@ -392,17 +381,14 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                 return null;
             }
 
-            string[] suiteLibraries = libraries.EnumerateObject()
-                                               .Select(property => property.Name)
-                                               .Where(name => name.StartsWith(_suitePackageId + "/", StringComparison.OrdinalIgnoreCase))
-                                               .ToArray();
+            string[] suiteLibraries = libraries.EnumerateObject().Select(property => property.Name)
+                                               .Where(name => name.StartsWith(_suitePackageId + "/", StringComparison.OrdinalIgnoreCase)).ToArray();
 
             if (suiteLibraries.Length == 0)
                 return null;
 
             string[] folders = packageFolders.EnumerateObject()
-                                             .Select(property => property.Name.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
-                                             .ToArray();
+                                             .Select(property => property.Name.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)).ToArray();
 
             foreach (string library in suiteLibraries)
             {
@@ -724,8 +710,7 @@ module.exports = {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < args.Length; i++)
         {
-            if (args[i]
-                    .StartsWith("--", StringComparison.Ordinal) && i + 1 < args.Length)
+            if (args[i].StartsWith("--", StringComparison.Ordinal) && i + 1 < args.Length)
             {
                 map[args[i]] = args[i + 1];
                 i++;
