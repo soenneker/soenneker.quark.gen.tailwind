@@ -44,7 +44,7 @@ jobs:
         run: dotnet build test/Soenneker.Quark.Gen.Tailwind.Tests/Soenneker.Quark.Gen.Tailwind.Tests.csproj --configuration Release --no-restore --verbosity minimal
 
       - name: Test
-        run: dotnet test test/Soenneker.Quark.Gen.Tailwind.Tests/Soenneker.Quark.Gen.Tailwind.Tests.csproj --configuration Release --no-build --no-restore --verbosity minimal
+        run: dotnet test --project test/Soenneker.Quark.Gen.Tailwind.Tests/Soenneker.Quark.Gen.Tailwind.Tests.csproj --configuration Release --no-build --no-restore --verbosity minimal
 
       - name: Restore library
         run: dotnet restore src/Soenneker.Quark.Gen.Tailwind/Soenneker.Quark.Gen.Tailwind.csproj --verbosity minimal
