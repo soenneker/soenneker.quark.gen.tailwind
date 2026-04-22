@@ -1,7 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-
 <Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
-
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -16,10 +13,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <Compile Remove="tailwind\**" />
-      <Content Remove="tailwind\**" />
-      <EmbeddedResource Remove="tailwind\**" />
-      <None Remove="tailwind\**" />
+        <Compile Remove="tailwind\**" />
+        <Content Remove="tailwind\**" />
+        <EmbeddedResource Remove="tailwind\**" />
+        <None Remove="tailwind\**" />
     </ItemGroup>
 
     <ItemGroup>
@@ -34,5 +31,4 @@
     <ItemGroup>
         <ProjectReference Include="..\..\..\soenneker.quark.suite\src\Soenneker.Quark.Suite\Soenneker.Quark.Suite.csproj" />
     </ItemGroup>
-
 </Project>

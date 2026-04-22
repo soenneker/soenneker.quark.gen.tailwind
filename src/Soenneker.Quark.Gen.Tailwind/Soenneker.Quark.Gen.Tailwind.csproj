@@ -1,5 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
-
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
@@ -48,9 +46,7 @@
     <ItemGroup>
         <None Include="Soenneker.Quark.Gen.Tailwind.targets" Pack="true" PackagePath="build\" />
         <None Include="Soenneker.Quark.Gen.Tailwind.targets" Pack="true" PackagePath="buildTransitive\" />
-
-        <None Include="..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\**\*.*"
-              Pack="true" PackagePath="buildTransitive\%(RecursiveDir)" />
+        <None Include="..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\**\*.*" Pack="true" PackagePath="buildTransitive\%(RecursiveDir)" />
     </ItemGroup>
 
     <ItemGroup>
@@ -63,25 +59,12 @@
     </ItemGroup>
 
     <!-- When consumed via ProjectReference, BuildTasks must exist so RunTailwindGeneratorBuildTasks can run. -->
-    <Target Name="BuildBuildTasksToolOnBuild"
-            BeforeTargets="Build">
-
-        <MSBuild Projects="..\Soenneker.Quark.Gen.Tailwind.BuildTasks\Soenneker.Quark.Gen.Tailwind.BuildTasks.csproj"
-                 Targets="Build"
-                 Properties="Configuration=$(Configuration)"
-                 BuildInParallel="true" />
+    <Target Name="BuildBuildTasksToolOnBuild" BeforeTargets="Build">
+        <MSBuild Projects="..\Soenneker.Quark.Gen.Tailwind.BuildTasks\Soenneker.Quark.Gen.Tailwind.BuildTasks.csproj" Targets="Build" Properties="Configuration=$(Configuration)" BuildInParallel="true" />
     </Target>
 
-    <Target Name="BuildBuildTasksTool"
-            BeforeTargets="Pack"
-            Condition="'$(IsPackable)' == 'true'">
-
-        <MSBuild Projects="..\Soenneker.Quark.Gen.Tailwind.BuildTasks\Soenneker.Quark.Gen.Tailwind.BuildTasks.csproj"
-                 Targets="Build"
-                 Properties="Configuration=$(Configuration);NoBuild=false"
-                 BuildInParallel="true" />
-
-        <Error Condition="!Exists('..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\Soenneker.Quark.Gen.Tailwind.BuildTasks.dll')"
-               Text="BuildTasks output missing. Aborting pack to avoid publishing a broken package." />
+    <Target Name="BuildBuildTasksTool" BeforeTargets="Pack" Condition="'$(IsPackable)' == 'true'">
+        <MSBuild Projects="..\Soenneker.Quark.Gen.Tailwind.BuildTasks\Soenneker.Quark.Gen.Tailwind.BuildTasks.csproj" Targets="Build" Properties="Configuration=$(Configuration);NoBuild=false" BuildInParallel="true" />
+        <Error Condition="!Exists('..\Soenneker.Quark.Gen.Tailwind.BuildTasks\bin\$(Configuration)\Soenneker.Quark.Gen.Tailwind.BuildTasks.dll')" Text="BuildTasks output missing. Aborting pack to avoid publishing a broken package." />
     </Target>
 </Project>
