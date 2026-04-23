@@ -10,7 +10,7 @@ public static class Startup
 {
     public static void ConfigureServices(IServiceCollection services)
     {
-        services.AddFileUtilAsScoped().AddDirectoryUtilAsScoped().AddNodeUtilAsScoped().AddScoped<ITailwindGeneratorRunner, TailwindGeneratorRunner>();
+        services.AddFileUtilAsSingleton().AddDirectoryUtilAsSingleton().AddNodeUtilAsSingleton().AddSingleton<ITailwindGeneratorRunner, TailwindGeneratorRunner>();
         services.AddHostedService<ConsoleHostedService>();
     }
 }
