@@ -14,18 +14,27 @@ dotnet add package Soenneker.Quark.Gen.Tailwind
 
 ## Theme configuration
 
-The Tailwind build task can generate `tailwind/quark-theme.generated.css` from shadcn v4 design-system settings. Add
-`tailwind/quark-shadcn.theme.json` to the consuming app:
+The Tailwind build task seeds `tailwind/quark-shadcn.theme.json` with shadcn/ui defaults when the file does not exist, then generates `tailwind/quark-theme.generated.css` from that config. Edit the JSON when the consuming app needs a different shadcn theme:
+
+```json
+{
+  "baseColor": "Neutral",
+  "theme": "Neutral",
+  "chartColor": "Neutral",
+  "radius": "Default"
+}
+```
+
+You can also provide additional shadcn v4 design-system settings:
 
 ```json
 {
   "style": "Mira",
   "baseColor": "Neutral",
-  "theme": "Neutral",
-  "chartColor": "Neutral",
+  "theme": "Blue",
+  "chartColor": "Emerald",
   "font": "Inter",
-  "headingFont": "Inter",
-  "preset": "b1D0dv72"
+  "headingFont": "Inter"
 }
 ```
 

@@ -29,6 +29,14 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     private const string _themeConfigFileName = "quark-shadcn.theme.json";
     private const string _legacyInlineGeneratedTxtFileName = "tw-inline.generated.txt";
     private const string _suitePackageId = "soenneker.quark.suite";
+    private const string _defaultThemeConfigJson = """
+{
+  "baseColor": "Neutral",
+  "theme": "Neutral",
+  "chartColor": "Neutral",
+  "radius": "Default"
+}
+""";
 
     private readonly ILogger<TailwindGeneratorRunner> _logger;
     private readonly INodeUtil _nodeUtil;
@@ -71,7 +79,10 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
         string inputCss = Path.Combine(tailwindDir, _inputCssFileName);
         string generatedThemeCssPath = Path.Combine(tailwindDir, _generatedThemeFileName);
+        string themeConfigPath = Path.Combine(tailwindDir, _themeConfigFileName);
         _logger.LogInformation("Ensuring Tailwind input.css, config, and package metadata exist.");
+
+        await EnsureDefaultThemeConfig(themeConfigPath, map, cancellationToken);
 
         ShadcnThemeOptions themeOptions = await ShadcnThemeOptions.Load(projectDir, tailwindDir, _themeConfigFileName, map, _fileUtil, _logger,
             cancellationToken);
@@ -169,6 +180,18 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         await _fileUtil.Write(hashPath, inputHash, log: false, cancellationToken);
         _logger.LogInformation("Completed Tailwind generation for project {ProjectDir}.", projectDir);
         return 0;
+    }
+
+    private async ValueTask EnsureDefaultThemeConfig(string themeConfigPath, IReadOnlyDictionary<string, string> args, CancellationToken cancellationToken)
+    {
+        if (args.TryGetValue("--shadcnThemeConfig", out string? explicitConfigPath) && !string.IsNullOrWhiteSpace(explicitConfigPath))
+            return;
+
+        if (await _fileUtil.Exists(themeConfigPath, cancellationToken))
+            return;
+
+        await _fileUtil.Write(themeConfigPath, _defaultThemeConfigJson + Environment.NewLine, log: false, cancellationToken);
+        _logger.LogInformation("Created default shadcn theme config at {ThemeConfigPath}.", themeConfigPath);
     }
 
     private async ValueTask<bool> CanSkipGeneration(string inputHash, string hashPath, string outputCssPath, string minOutputCssPath,
