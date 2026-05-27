@@ -21,10 +21,10 @@ internal static class ShadcnThemeCssGenerator
     [
         "background", "foreground", "card", "card-foreground", "popover", "popover-foreground", "primary", "primary-foreground",
         "secondary", "secondary-foreground", "muted", "muted-foreground", "accent", "accent-foreground", "destructive",
-        "destructive-foreground", "border", "input", "ring", "chart-1", "chart-2", "chart-3", "chart-4", "chart-5", "series-1",
-        "series-2", "series-3", "series-4", "series-5", "radius", "sidebar", "sidebar-foreground", "sidebar-primary",
-        "sidebar-primary-foreground", "sidebar-accent", "sidebar-accent-foreground", "sidebar-border", "sidebar-ring", "font-sans",
-        "font-heading", "font-serif", "font-mono"
+        "border", "input", "ring", "chart-1", "chart-2", "chart-3", "chart-4", "chart-5", "series-1", "series-2", "series-3",
+        "series-4", "series-5", "radius", "sidebar", "sidebar-foreground", "sidebar-primary", "sidebar-primary-foreground",
+        "sidebar-accent", "sidebar-accent-foreground", "sidebar-border", "sidebar-ring", "font-sans", "font-heading", "font-serif",
+        "font-mono"
     ];
 
     private static readonly string[] _inlineVariableOrder =
@@ -32,11 +32,11 @@ internal static class ShadcnThemeCssGenerator
         "font-sans", "font-heading", "font-mono", "font-serif", "color-background", "color-foreground", "color-card",
         "color-card-foreground", "color-popover", "color-popover-foreground", "color-primary", "color-primary-foreground",
         "color-secondary", "color-secondary-foreground", "color-muted", "color-muted-foreground", "color-accent",
-        "color-accent-foreground", "color-destructive", "color-destructive-foreground", "color-border", "color-input", "color-ring",
-        "color-chart-1", "color-chart-2", "color-chart-3", "color-chart-4", "color-chart-5", "color-series-1", "color-series-2",
-        "color-series-3", "color-series-4", "color-series-5", "color-sidebar", "color-sidebar-foreground", "color-sidebar-primary",
-        "color-sidebar-primary-foreground", "color-sidebar-accent", "color-sidebar-accent-foreground", "color-sidebar-border",
-        "color-sidebar-ring", "radius-sm", "radius-md", "radius-lg", "radius-xl", "radius-2xl", "radius-3xl", "radius-4xl"
+        "color-accent-foreground", "color-destructive", "color-border", "color-input", "color-ring", "color-chart-1", "color-chart-2",
+        "color-chart-3", "color-chart-4", "color-chart-5", "color-series-1", "color-series-2", "color-series-3", "color-series-4",
+        "color-series-5", "color-sidebar", "color-sidebar-foreground", "color-sidebar-primary", "color-sidebar-primary-foreground",
+        "color-sidebar-accent", "color-sidebar-accent-foreground", "color-sidebar-border", "color-sidebar-ring", "radius-sm", "radius-md",
+        "radius-lg", "radius-xl", "radius-2xl", "radius-3xl", "radius-4xl"
     ];
 
     private static readonly Dictionary<string, FontDefinition> _fontDefinitions = new(StringComparer.OrdinalIgnoreCase)
@@ -168,7 +168,6 @@ internal static class ShadcnThemeCssGenerator
             ["color-accent"] = "var(--accent)",
             ["color-accent-foreground"] = "var(--accent-foreground)",
             ["color-destructive"] = "var(--destructive)",
-            ["color-destructive-foreground"] = "var(--destructive-foreground)",
             ["color-border"] = "var(--border)",
             ["color-input"] = "var(--input)",
             ["color-ring"] = "var(--ring)",
