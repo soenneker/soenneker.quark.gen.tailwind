@@ -26,6 +26,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     private const string _projectManifestFileName = "quark-tailwind-manifest.txt";
     private const string _suiteManifestFileName = "quark-suite-tailwind-manifest.txt";
     private const string _generatedThemeFileName = "quark-theme.generated.css";
+    private const string _themeConfigFileName = "quark-shadcn.theme.json";
     private const string _legacyInlineGeneratedTxtFileName = "tw-inline.generated.txt";
     private const string _suitePackageId = "soenneker.quark.suite";
 
@@ -72,6 +73,10 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         string generatedThemeCssPath = Path.Combine(tailwindDir, _generatedThemeFileName);
         _logger.LogInformation("Ensuring Tailwind input.css, config, and package metadata exist.");
 
+        ShadcnThemeOptions themeOptions = await ShadcnThemeOptions.Load(projectDir, tailwindDir, _themeConfigFileName, map, _fileUtil, _logger,
+            cancellationToken);
+        bool configuredThemeCss = await EnsureConfiguredThemeCss(generatedThemeCssPath, themeOptions, cancellationToken);
+
         if (!await _fileUtil.Exists(inputCss, cancellationToken))
         {
             _logger.LogInformation("Project Tailwind input.css not found. Creating starter file at {InputCssPath}.", inputCss);
@@ -83,6 +88,9 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         else
         {
             _logger.LogInformation("Using project Tailwind input.css at {InputCssPath}.", inputCss);
+
+            if (configuredThemeCss)
+                await EnsureInputCssImportsGeneratedTheme(inputCss, cancellationToken);
         }
 
         await EnsureTailwindConfig(tailwindDir, cancellationToken);
@@ -113,7 +121,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
         string minOutputCssFull = Path.Combine(Path.GetDirectoryName(outputCssFull)!, "quark-tailwind.min.css");
         string inputHash = await ComputeInputHash(projectDir, tailwindDir, projectManifestPath, localSuiteManifestPath, inputCss, generatedThemeCssPath,
-            configPath, packageJsonPath, packageLockPath, cancellationToken);
+            configPath, packageJsonPath, packageLockPath, themeOptions, cancellationToken);
 
         if (await CanSkipGeneration(inputHash, hashPath, outputCssFull, minOutputCssFull, cancellationToken))
         {
@@ -189,8 +197,79 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         return isMatch;
     }
 
+    private async ValueTask<bool> EnsureConfiguredThemeCss(string generatedThemeCssPath, ShadcnThemeOptions themeOptions,
+        CancellationToken cancellationToken)
+    {
+        if (!themeOptions.IsConfigured)
+            return false;
+
+        string css;
+
+        if (!string.IsNullOrWhiteSpace(themeOptions.RawCss))
+        {
+            css = themeOptions.RawCss!;
+        }
+        else if (!string.IsNullOrWhiteSpace(themeOptions.CssFilePath))
+        {
+            if (!await _fileUtil.Exists(themeOptions.CssFilePath!, cancellationToken).NoSync())
+                throw new FileNotFoundException("shadcn theme CSS file was configured but not found.", themeOptions.CssFilePath);
+
+            css = await _fileUtil.Read(themeOptions.CssFilePath!, log: false, cancellationToken);
+        }
+        else
+        {
+            css = ShadcnThemeCssGenerator.Generate(themeOptions);
+        }
+
+        if (string.IsNullOrWhiteSpace(css))
+            throw new InvalidOperationException("shadcn theme configuration produced no CSS.");
+
+        string normalizedCss = css.TrimEnd() + Environment.NewLine;
+        string? existing = await _fileUtil.TryRead(generatedThemeCssPath, log: false, cancellationToken);
+
+        if (string.Equals(existing, normalizedCss, StringComparison.Ordinal))
+        {
+            _logger.LogInformation("Configured shadcn theme CSS is already up-to-date at {ThemeCssPath}.", generatedThemeCssPath);
+            return true;
+        }
+
+        string? outputDir = Path.GetDirectoryName(generatedThemeCssPath);
+        if (!string.IsNullOrWhiteSpace(outputDir))
+            await _directoryUtil.Create(outputDir, log: false, cancellationToken).NoSync();
+
+        await _fileUtil.Write(generatedThemeCssPath, normalizedCss, log: false, cancellationToken);
+        _logger.LogInformation("Wrote configured shadcn theme CSS to {ThemeCssPath}.", generatedThemeCssPath);
+        return true;
+    }
+
+    private async ValueTask EnsureInputCssImportsGeneratedTheme(string inputCssPath, CancellationToken cancellationToken)
+    {
+        string contents = await _fileUtil.Read(inputCssPath, log: false, cancellationToken);
+
+        if (contents.Contains(_generatedThemeFileName, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        string importBlock = $"@import \"./{_generatedThemeFileName}\";{Environment.NewLine}{Environment.NewLine}";
+
+        foreach (string fallbackThemeBlock in GetKnownFallbackThemeBlocks())
+        {
+            if (contents.Contains(fallbackThemeBlock, StringComparison.Ordinal))
+            {
+                string updated = contents.Replace(fallbackThemeBlock, importBlock, StringComparison.Ordinal);
+                await _fileUtil.Write(inputCssPath, updated, log: false, cancellationToken);
+                _logger.LogInformation("Updated Tailwind input.css to import configured theme CSS.");
+                return;
+            }
+        }
+
+        _logger.LogWarning(
+            "Configured shadcn theme CSS was generated, but {InputCssPath} does not import {ThemeFileName}. Add @import \"./{ThemeFileName}\" near the top of input.css.",
+            inputCssPath, _generatedThemeFileName, _generatedThemeFileName);
+    }
+
     private async ValueTask<string> ComputeInputHash(string projectDir, string tailwindDir, string projectManifestPath, string localSuiteManifestPath,
         string inputCssPath, string generatedThemeCssPath, string configPath, string packageJsonPath, string packageLockPath,
+        ShadcnThemeOptions themeOptions,
         CancellationToken cancellationToken)
     {
         var entries = new List<string>();
@@ -207,6 +286,14 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         await AddSpecificFileMetadata(entries, tailwindDir, configPath, "tailwind-config", cancellationToken);
         await AddSpecificFileMetadata(entries, tailwindDir, packageJsonPath, "package-json", cancellationToken);
         await AddSpecificFileMetadata(entries, tailwindDir, packageLockPath, "package-lock", cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(themeOptions.ConfigPath))
+            await AddSpecificFileMetadata(entries, projectDir, themeOptions.ConfigPath!, "theme-config", cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(themeOptions.CssFilePath))
+            await AddSpecificFileMetadata(entries, projectDir, themeOptions.CssFilePath!, "theme-css-file", cancellationToken);
+
+        AddThemeOptionMetadata(entries, themeOptions);
 
         string assemblyLocation = GetType().Assembly.Location;
         if (!string.IsNullOrWhiteSpace(assemblyLocation) && await _fileUtil.Exists(assemblyLocation, cancellationToken).NoSync())
@@ -241,6 +328,45 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             return;
 
         entries.Add(BuildMetadataEntry(rootDir, filePath, category));
+    }
+
+    private static void AddThemeOptionMetadata(List<string> entries, ShadcnThemeOptions options)
+    {
+        if (!options.IsConfigured)
+            return;
+
+        AddThemeOptionEntry(entries, "theme-style", options.Style);
+        AddThemeOptionEntry(entries, "theme-base-color", options.BaseColor);
+        AddThemeOptionEntry(entries, "theme-color", options.ThemeColor);
+        AddThemeOptionEntry(entries, "theme-chart-color", options.ChartColor);
+        AddThemeOptionEntry(entries, "theme-font", options.Font);
+        AddThemeOptionEntry(entries, "theme-heading-font", options.HeadingFont);
+        AddThemeOptionEntry(entries, "theme-serif-font", options.SerifFont);
+        AddThemeOptionEntry(entries, "theme-mono-font", options.MonoFont);
+        AddThemeOptionEntry(entries, "theme-radius", options.Radius);
+        AddThemeOptionEntry(entries, "theme-preset", options.Preset);
+        AddThemeDictionaryEntries(entries, "theme-light", options.LightOverrides);
+        AddThemeDictionaryEntries(entries, "theme-dark", options.DarkOverrides);
+        AddThemeDictionaryEntries(entries, "theme-inline", options.InlineOverrides);
+    }
+
+    private static void AddThemeOptionEntry(List<string> entries, string category, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        entries.Add($"{category}|{value.Trim()}");
+    }
+
+    private static void AddThemeDictionaryEntries(List<string> entries, string category, IReadOnlyDictionary<string, string> values)
+    {
+        foreach ((string key, string value) in values.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
+                continue;
+
+            entries.Add($"{category}|{key.Trim()}|{value.Trim()}");
+        }
     }
 
     private static string BuildMetadataEntry(string rootDir, string filePath, string category)
@@ -446,7 +572,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             $"@source \"./{_suiteManifestFileName}\";{Environment.NewLine}@source \"./{_projectManifestFileName}\";{Environment.NewLine}{Environment.NewLine}";
         string themeBlock = generatedThemeExists
             ? $"@import \"./{_generatedThemeFileName}\";{Environment.NewLine}{Environment.NewLine}"
-            : GetFallbackThemeBlock();
+            : GetCurrentFallbackThemeBlock();
 
         string contents = @"@import ""tailwindcss"";
 @import ""tw-animate-css"";
@@ -474,6 +600,17 @@ __QUARK_THEME_BLOCK____QUARK_MANIFEST_SOURCES__/* Scan project sources from the 
 
         // Tailwind v4 syntax (v3 @tailwind directives are deprecated and can cause no output or errors).
         await _fileUtil.Write(inputCssPath, contents, true, cancellationToken);
+    }
+
+    private static IEnumerable<string> GetKnownFallbackThemeBlocks()
+    {
+        yield return GetCurrentFallbackThemeBlock();
+        yield return GetFallbackThemeBlock();
+    }
+
+    private static string GetCurrentFallbackThemeBlock()
+    {
+        return ShadcnThemeCssGenerator.Generate(new ShadcnThemeOptions()) + Environment.NewLine + Environment.NewLine;
     }
 
     private static string GetFallbackThemeBlock()
