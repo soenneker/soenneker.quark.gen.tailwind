@@ -150,9 +150,7 @@ internal static class ShadcnThemeCssGenerator
 
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["font-sans"] = "var(--font-sans)",
             ["font-heading"] = headingValue,
-            ["font-mono"] = "var(--font-mono)",
             ["color-background"] = "var(--background)",
             ["color-foreground"] = "var(--foreground)",
             ["color-card"] = "var(--card)",
@@ -198,8 +196,14 @@ internal static class ShadcnThemeCssGenerator
             ["radius-4xl"] = "calc(var(--radius) * 2.6)"
         };
 
+        if (!string.IsNullOrWhiteSpace(options.Font))
+            values["font-sans"] = BuildFontStack(options.Font!, _defaultSansFallback);
+
+        if (!string.IsNullOrWhiteSpace(options.MonoFont))
+            values["font-mono"] = BuildFontStack(options.MonoFont!, _defaultMonoFallback);
+
         if (!string.IsNullOrWhiteSpace(options.SerifFont))
-            values["font-serif"] = "var(--font-serif)";
+            values["font-serif"] = BuildFontStack(options.SerifFont!, _defaultSerifFallback);
 
         return values;
     }
@@ -267,11 +271,7 @@ internal static class ShadcnThemeCssGenerator
 
     private static string ResolveInlineHeadingFontValue(ShadcnThemeOptions options)
     {
-        if (!IsHeadingFontInherited(options))
-            return "var(--font-heading)";
-
-        FontDefinition? bodyFont = TryGetFontDefinition(options.Font);
-        return bodyFont is null ? "var(--font-sans)" : $"var({bodyFont.Variable})";
+        return IsHeadingFontInherited(options) ? "var(--font-sans)" : BuildFontStack(options.HeadingFont!, _defaultSansFallback);
     }
 
     private static bool IsHeadingFontInherited(ShadcnThemeOptions options)
