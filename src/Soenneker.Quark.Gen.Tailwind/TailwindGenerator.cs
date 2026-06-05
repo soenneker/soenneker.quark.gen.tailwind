@@ -9,6 +9,10 @@ namespace Soenneker.Quark.Gen.Tailwind;
 [Generator]
 public sealed class TailwindGenerator : IIncrementalGenerator
 {
+    /// <summary>
+    /// Executes the initialize operation.
+    /// </summary>
+    /// <param name="context">The context.</param>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // Generator runs only on build; no incremental output. BuildTasks handle Blazor analysis and Tailwind CLI.
