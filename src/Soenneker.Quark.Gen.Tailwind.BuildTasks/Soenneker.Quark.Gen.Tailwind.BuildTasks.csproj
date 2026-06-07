@@ -12,6 +12,6 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.8" />
-        <PackageReference Include="Soenneker.Node.Util" Version="4.0.162" />
+        <PackageReference Include="Soenneker.Node.Util" Version="4.0.165" />
     </ItemGroup>
 </Project>
