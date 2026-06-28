@@ -82,11 +82,26 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         string themeConfigPath = Path.Combine(tailwindDir, _themeConfigFileName);
         _logger.LogInformation("Ensuring Tailwind input.css, config, and package metadata exist.");
 
-        await EnsureDefaultThemeConfig(themeConfigPath, map, cancellationToken);
+        ShadcnThemeOptions themeOptions;
+        bool configuredThemeCss;
 
-        ShadcnThemeOptions themeOptions = await ShadcnThemeOptions.Load(projectDir, tailwindDir, _themeConfigFileName, map, _fileUtil, _logger,
-            cancellationToken);
-        bool configuredThemeCss = await EnsureConfiguredThemeCss(generatedThemeCssPath, themeOptions, cancellationToken);
+        string? quarkThemeCss = HasExplicitShadcnConfiguration(map)
+            ? null
+            : QuarkThemeTailwindCssResolver.TryGenerate(GetArg(map, "--targetPath"), _logger);
+
+        if (!string.IsNullOrWhiteSpace(quarkThemeCss))
+        {
+            themeOptions = new ShadcnThemeOptions();
+            configuredThemeCss = await WriteThemeCss(generatedThemeCssPath, quarkThemeCss, "Quark theme token CSS", cancellationToken);
+        }
+        else
+        {
+            await EnsureDefaultThemeConfig(themeConfigPath, map, cancellationToken);
+
+            themeOptions = await ShadcnThemeOptions.Load(projectDir, tailwindDir, _themeConfigFileName, map, _fileUtil, _logger,
+                cancellationToken);
+            configuredThemeCss = await EnsureConfiguredThemeCss(generatedThemeCssPath, themeOptions, cancellationToken);
+        }
 
         if (!await _fileUtil.Exists(inputCss, cancellationToken))
         {
@@ -247,12 +262,17 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         if (string.IsNullOrWhiteSpace(css))
             throw new InvalidOperationException("shadcn theme configuration produced no CSS.");
 
+        return await WriteThemeCss(generatedThemeCssPath, css, "Configured shadcn theme CSS", cancellationToken);
+    }
+
+    private async ValueTask<bool> WriteThemeCss(string generatedThemeCssPath, string css, string sourceDescription, CancellationToken cancellationToken)
+    {
         string normalizedCss = css.TrimEnd() + Environment.NewLine;
         string? existing = await _fileUtil.TryRead(generatedThemeCssPath, log: false, cancellationToken);
 
         if (string.Equals(existing, normalizedCss, StringComparison.Ordinal))
         {
-            _logger.LogInformation("Configured shadcn theme CSS is already up-to-date at {ThemeCssPath}.", generatedThemeCssPath);
+            _logger.LogInformation("{SourceDescription} is already up-to-date at {ThemeCssPath}.", sourceDescription, generatedThemeCssPath);
             return true;
         }
 
@@ -261,7 +281,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             await _directoryUtil.Create(outputDir, log: false, cancellationToken).NoSync();
 
         await _fileUtil.Write(generatedThemeCssPath, normalizedCss, log: false, cancellationToken);
-        _logger.LogInformation("Wrote configured shadcn theme CSS to {ThemeCssPath}.", generatedThemeCssPath);
+        _logger.LogInformation("Wrote {SourceDescription} to {ThemeCssPath}.", sourceDescription, generatedThemeCssPath);
         return true;
     }
 
@@ -860,6 +880,31 @@ module.exports = {
                 return 1;
             }
         }
+    }
+
+    private static bool HasExplicitShadcnConfiguration(IReadOnlyDictionary<string, string> args)
+    {
+        return HasArg(args, "--shadcnThemeConfig") ||
+               HasArg(args, "--shadcnThemeCss") ||
+               HasArg(args, "--shadcnThemeCssFile") ||
+               HasArg(args, "--shadcnThemeStyle") ||
+               HasArg(args, "--shadcnThemeBaseColor") ||
+               HasArg(args, "--shadcnThemeColor") ||
+               HasArg(args, "--shadcnTheme") ||
+               HasArg(args, "--shadcnThemeChartColor") ||
+               HasArg(args, "--shadcnThemeFont") ||
+               HasArg(args, "--shadcnThemeHeadingFont") ||
+               HasArg(args, "--shadcnThemeSerifFont") ||
+               HasArg(args, "--shadcnThemeMonoFont") ||
+               HasArg(args, "--shadcnThemeRadius") ||
+               HasArg(args, "--shadcnThemePreset");
+    }
+
+    private static bool HasArg(IReadOnlyDictionary<string, string> args, string key) => !string.IsNullOrWhiteSpace(GetArg(args, key));
+
+    private static string? GetArg(IReadOnlyDictionary<string, string> args, string key)
+    {
+        return args.TryGetValue(key, out string? value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
     }
 
     private static Dictionary<string, string> ParseArgs(string[] args)
