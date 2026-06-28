@@ -85,14 +85,14 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         ShadcnThemeOptions themeOptions;
         bool configuredThemeCss;
 
-        string? quarkThemeCss = HasExplicitShadcnConfiguration(map)
-            ? null
-            : QuarkThemeTailwindCssResolver.TryGenerate(GetArg(map, "--targetPath"), _logger);
+        bool explicitShadcnConfiguration = HasExplicitShadcnConfiguration(map);
+        bool generatedThemeCssExists = await _fileUtil.Exists(generatedThemeCssPath, cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(quarkThemeCss))
+        if (!explicitShadcnConfiguration && generatedThemeCssExists)
         {
+            _logger.LogInformation("Using generated Quark theme token CSS at {ThemeCssPath}.", generatedThemeCssPath);
             themeOptions = new ShadcnThemeOptions();
-            configuredThemeCss = await WriteThemeCss(generatedThemeCssPath, quarkThemeCss, "Quark theme token CSS", cancellationToken);
+            configuredThemeCss = true;
         }
         else
         {

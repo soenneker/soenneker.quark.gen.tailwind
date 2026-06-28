@@ -37,7 +37,6 @@
         <_ShadcnThemeMonoFontArg Condition="'$(ShadcnThemeMonoFont)' != ''"> --shadcnThemeMonoFont &quot;$(ShadcnThemeMonoFont)&quot;</_ShadcnThemeMonoFontArg>
         <_ShadcnThemeRadiusArg Condition="'$(ShadcnThemeRadius)' != ''"> --shadcnThemeRadius &quot;$(ShadcnThemeRadius)&quot;</_ShadcnThemeRadiusArg>
         <_ShadcnThemePresetArg Condition="'$(ShadcnThemePreset)' != ''"> --shadcnThemePreset &quot;$(ShadcnThemePreset)&quot;</_ShadcnThemePresetArg>
-        <_TailwindTargetPathArg Condition="'$(TargetPath)' != ''"> --targetPath &quot;$(TargetPath)&quot;</_TailwindTargetPathArg>
     </PropertyGroup>
 
     <!-- Runs before Build so generated CSS exists and can be included in Content for copy to output. -->
@@ -46,7 +45,7 @@
             BeforeTargets="Build"
             Condition="'$(DesignTimeBuild)'!='true' and '$(IsCrossTargetingBuild)'!='true' and '$(TailwindGeneratorBuildEnabled)'=='true'">
 
-        <Message Importance="high" Text="Running Soenneker.Quark.Gen.Tailwind BuildTasks: projectDir=$(_TailwindProjectDir) targetPath=$(TargetPath)" />
+        <Message Importance="high" Text="Running Soenneker.Quark.Gen.Tailwind BuildTasks: projectDir=$(_TailwindProjectDir)" />
         <Error Condition="'$(_TailwindProjectDir)' == ''"
                Text="Soenneker.Quark.Gen.Tailwind: project directory could not be resolved (ProjectDir and MSBuildProjectDirectory are empty). Set TailwindProjectDir or build a project that has a valid project directory." />
         <Error Condition="'$(TailwindBuildTasksDllPath)'==''"
@@ -59,7 +58,7 @@
               ConsoleToMSBuild="true"
               StandardOutputImportance="high"
               StandardErrorImportance="high"
-              Command='dotnet exec &quot;$(TailwindBuildTasksDllPath)&quot; --projectDir &quot;$(_TailwindProjectDir)&quot;$(_TailwindTargetPathArg)$(_TailwindOutputArg)$(_TailwindManifestArg)$(_ShadcnThemeConfigArg)$(_ShadcnThemeCssFileArg)$(_ShadcnThemeStyleArg)$(_ShadcnThemeBaseColorArg)$(_ShadcnThemeArg)$(_ShadcnThemeColorArg)$(_ShadcnThemeChartColorArg)$(_ShadcnThemeFontArg)$(_ShadcnThemeHeadingFontArg)$(_ShadcnThemeSerifFontArg)$(_ShadcnThemeMonoFontArg)$(_ShadcnThemeRadiusArg)$(_ShadcnThemePresetArg)' />
+              Command='dotnet exec &quot;$(TailwindBuildTasksDllPath)&quot; --projectDir &quot;$(_TailwindProjectDir)&quot;$(_TailwindOutputArg)$(_TailwindManifestArg)$(_ShadcnThemeConfigArg)$(_ShadcnThemeCssFileArg)$(_ShadcnThemeStyleArg)$(_ShadcnThemeBaseColorArg)$(_ShadcnThemeArg)$(_ShadcnThemeColorArg)$(_ShadcnThemeChartColorArg)$(_ShadcnThemeFontArg)$(_ShadcnThemeHeadingFontArg)$(_ShadcnThemeSerifFontArg)$(_ShadcnThemeMonoFontArg)$(_ShadcnThemeRadiusArg)$(_ShadcnThemePresetArg)' />
     </Target>
 
     <!-- Copy generated Tailwind CSS to build output (Content pipeline may run before our target). -->
