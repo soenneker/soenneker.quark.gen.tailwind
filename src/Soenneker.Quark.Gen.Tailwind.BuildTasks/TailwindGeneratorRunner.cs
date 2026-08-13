@@ -352,7 +352,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
     private async ValueTask AddSourceMetadataEntries(List<string> entries, string projectDir, string extension, CancellationToken cancellationToken)
     {
-        List<string> files = await _directoryUtil.GetFilesByExtension(projectDir, extension, recursive: true, cancellationToken).NoSync();
+        var files = new List<string>(ProjectFileEnumerator.EnumerateByExtension(projectDir, extension, cancellationToken));
 
         foreach (string file in files)
         {
