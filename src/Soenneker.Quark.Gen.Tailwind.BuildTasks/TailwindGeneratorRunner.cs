@@ -322,19 +322,19 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         await AddSourceMetadataEntries(entries, projectDir, ".cshtml", cancellationToken);
         await AddSourceMetadataEntries(entries, projectDir, ".html", cancellationToken);
 
-        await AddSpecificFileMetadata(entries, tailwindDir, projectManifestPath, "manifest-project", cancellationToken);
-        await AddSpecificFileMetadata(entries, tailwindDir, localSuiteManifestPath, "manifest-suite", cancellationToken);
-        await AddSpecificFileMetadata(entries, tailwindDir, inputCssPath, "input-css", cancellationToken);
-        await AddSpecificFileMetadata(entries, tailwindDir, generatedThemeCssPath, "generated-theme", cancellationToken);
-        await AddSpecificFileMetadata(entries, tailwindDir, configPath, "tailwind-config", cancellationToken);
-        await AddSpecificFileMetadata(entries, tailwindDir, packageJsonPath, "package-json", cancellationToken);
-        await AddSpecificFileMetadata(entries, tailwindDir, packageLockPath, "package-lock", cancellationToken);
+        await AddSpecificFileContent(entries, tailwindDir, projectManifestPath, "manifest-project", cancellationToken);
+        await AddSpecificFileContent(entries, tailwindDir, localSuiteManifestPath, "manifest-suite", cancellationToken);
+        await AddSpecificFileContent(entries, tailwindDir, inputCssPath, "input-css", cancellationToken);
+        await AddSpecificFileContent(entries, tailwindDir, generatedThemeCssPath, "generated-theme", cancellationToken);
+        await AddSpecificFileContent(entries, tailwindDir, configPath, "tailwind-config", cancellationToken);
+        await AddSpecificFileContent(entries, tailwindDir, packageJsonPath, "package-json", cancellationToken);
+        await AddSpecificFileContent(entries, tailwindDir, packageLockPath, "package-lock", cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(themeOptions.ConfigPath))
-            await AddSpecificFileMetadata(entries, projectDir, themeOptions.ConfigPath!, "theme-config", cancellationToken);
+            await AddSpecificFileContent(entries, projectDir, themeOptions.ConfigPath!, "theme-config", cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(themeOptions.CssFilePath))
-            await AddSpecificFileMetadata(entries, projectDir, themeOptions.CssFilePath!, "theme-css-file", cancellationToken);
+            await AddSpecificFileContent(entries, projectDir, themeOptions.CssFilePath!, "theme-css-file", cancellationToken);
 
         AddThemeOptionMetadata(entries, themeOptions);
 
@@ -365,12 +365,14 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         }
     }
 
-    private async ValueTask AddSpecificFileMetadata(List<string> entries, string rootDir, string filePath, string category, CancellationToken cancellationToken)
+    private async ValueTask AddSpecificFileContent(List<string> entries, string rootDir, string filePath, string category, CancellationToken cancellationToken)
     {
         if (!await _fileUtil.Exists(filePath, cancellationToken).NoSync())
             return;
 
-        entries.Add(BuildMetadataEntry(rootDir, filePath, category));
+        string content = await _fileUtil.Read(filePath, log: false, cancellationToken);
+        string relativePath = Path.GetRelativePath(rootDir, filePath).Replace('\\', '/');
+        entries.Add($"{category}|{relativePath}|{XxHash3Util.Hash(content)}");
     }
 
     private static void AddThemeOptionMetadata(List<string> entries, ShadcnThemeOptions options)

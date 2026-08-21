@@ -39,10 +39,18 @@
         <_ShadcnThemePresetArg Condition="'$(ShadcnThemePreset)' != ''"> --shadcnThemePreset &quot;$(ShadcnThemePreset)&quot;</_ShadcnThemePresetArg>
     </PropertyGroup>
 
+    <ItemGroup>
+        <_TailwindGeneratorInputs Include="$(_TailwindProjectDir)\**\*.cs;$(_TailwindProjectDir)\**\*.razor;$(_TailwindProjectDir)\**\*.cshtml;$(_TailwindProjectDir)\**\*.html"
+                                  Exclude="$(_TailwindProjectDir)\bin\**;$(_TailwindProjectDir)\obj\**;$(_TailwindProjectDir)\node_modules\**" />
+        <_TailwindGeneratorInputs Include="$(_TailwindProjectDir)\tailwind\input.css;$(_TailwindProjectDir)\tailwind\quark-theme.generated.css;$(_TailwindProjectDir)\tailwind\quark-tailwind-manifest.txt;$(_TailwindProjectDir)\tailwind\quark-suite-tailwind-manifest.txt;$(_TailwindProjectDir)\tailwind\tailwind.config.js;$(_TailwindProjectDir)\tailwind\package.json;$(_TailwindProjectDir)\tailwind\package-lock.json" />
+    </ItemGroup>
+
     <!-- Runs before Build so generated CSS exists and can be included in Content for copy to output. -->
     <Target Name="RunTailwindGeneratorBuildTasks"
             AfterTargets="RunQuarkTailwindManifestGeneratorBuildTasks"
             BeforeTargets="Build"
+            Inputs="@(_TailwindGeneratorInputs);$(MSBuildProjectFullPath);$(ProjectAssetsFile);$(TailwindBuildTasksDllPath)"
+            Outputs="$(TailwindOutput);$(TailwindMinOutput)"
             Condition="'$(DesignTimeBuild)'!='true' and '$(IsCrossTargetingBuild)'!='true' and '$(TailwindGeneratorBuildEnabled)'=='true'">
 
         <Message Importance="high" Text="Running Soenneker.Quark.Gen.Tailwind BuildTasks: projectDir=$(_TailwindProjectDir)" />
