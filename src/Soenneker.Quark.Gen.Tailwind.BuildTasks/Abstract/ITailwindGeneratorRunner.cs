@@ -9,9 +9,9 @@ namespace Soenneker.Quark.Gen.Tailwind.BuildTasks.Abstract;
 public interface ITailwindGeneratorRunner
 {
     /// <summary>
-    /// Executes the run operation.
+    /// Runs tailwind Generator Runner for the Tailwind Generator Runner.
     /// </summary>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A task containing the result of the operation.</returns>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    /// <returns>A task whose result is the requested value.</returns>
     ValueTask<int> Run(CancellationToken cancellationToken = default);
 }
