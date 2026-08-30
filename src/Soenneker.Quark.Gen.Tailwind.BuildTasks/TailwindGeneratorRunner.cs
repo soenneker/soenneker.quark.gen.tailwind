@@ -18,7 +18,6 @@ using Soenneker.Hashing.XxHash;
 
 namespace Soenneker.Quark.Gen.Tailwind.BuildTasks;
 
-/// <inheritdoc cref="ITailwindGeneratorRunner"/>
 public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 {
     private const string _tailwindDirName = "tailwind";
@@ -155,15 +154,9 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             return 0;
         }
 
-        try
-        {
-            _logger.LogInformation("Running npm install in {TailwindDir}.", tailwindDir);
-            await _nodeUtil.NpmInstall(tailwindDir, cleanInstall: false, skipIfUpToDate: true, cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "npm install failed. Continuing with Tailwind CLI.");
-        }
+        _logger.LogInformation("Installing Tailwind dependencies in {TailwindDir}.", tailwindDir);
+        await _nodeUtil.NpmInstall(tailwindDir, cleanInstall: false, ignoreScripts: true, skipIfUpToDate: true,
+            cancellationToken: cancellationToken);
 
         // Pass path relative to tailwind dir so CLI writes to the correct file (avoids Windows absolute-path issues).
         string outputCssForCli = GetRelativePath(tailwindDir, outputCssFull);
@@ -189,7 +182,8 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForMin, minify: true, cancellationToken);
         if (exitCode != 0)
         {
-            _logger.LogWarning("Tailwind CLI (minify) exited with code {ExitCode}. Full CSS was built; minified output may be missing.", exitCode);
+            _logger.LogError("Tailwind CLI could not produce the minified CSS output; exit code {ExitCode}.", exitCode);
+            return exitCode;
         }
 
         await _fileUtil.Write(hashPath, inputHash, log: false, cancellationToken);
@@ -811,7 +805,7 @@ module.exports = {
         bool hasConfig = await _fileUtil.Exists(configPath, cancellationToken);
         string? configFileName = hasConfig ? Path.GetFileName(configPath) : null;
 
-        var argList = new List<string> { "@tailwindcss/cli" };
+        var argList = new List<string> { "--no-install", "@tailwindcss/cli" };
         if (hasConfig && !string.IsNullOrEmpty(configFileName))
         {
             argList.Add("-c");

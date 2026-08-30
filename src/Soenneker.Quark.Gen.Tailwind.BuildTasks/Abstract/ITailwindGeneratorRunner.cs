@@ -4,14 +4,14 @@ using System.Threading.Tasks;
 namespace Soenneker.Quark.Gen.Tailwind.BuildTasks.Abstract;
 
 /// <summary>
-/// Defines the tailwind generator runner contract.
+/// Generates Tailwind CSS outputs for a consuming Quark project.
 /// </summary>
 public interface ITailwindGeneratorRunner
 {
     /// <summary>
-    /// Runs tailwind Generator Runner for the Tailwind Generator Runner.
+    /// Generates the configured full and minified Tailwind CSS outputs.
     /// </summary>
     /// <param name="cancellationToken">Token used to cancel the operation.</param>
-    /// <returns>A task whose result is the requested value.</returns>
+    /// <returns>The process exit code: zero on success; otherwise nonzero.</returns>
     ValueTask<int> Run(CancellationToken cancellationToken = default);
 }
