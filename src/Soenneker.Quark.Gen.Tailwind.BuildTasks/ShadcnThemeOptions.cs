@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Soenneker.Extensions.ValueTask;
 using Soenneker.Utils.File.Abstract;
+using Soenneker.Utils.PooledStringBuilders;
 
 namespace Soenneker.Quark.Gen.Tailwind.BuildTasks;
 
@@ -229,36 +230,42 @@ internal sealed class ShadcnThemeOptions
         while (trimmed.StartsWith("--", StringComparison.Ordinal))
             trimmed = trimmed.Substring(2);
 
-        var builder = new StringBuilder(trimmed.Length + 8);
-
-        for (var i = 0; i < trimmed.Length; i++)
+        var builder = new PooledStringBuilder(trimmed.Length + 8);
+        try
         {
-            char current = trimmed[i];
-
-            if (current is '_' or ' ')
+            for (var i = 0; i < trimmed.Length; i++)
             {
-                AppendHyphen(builder);
-                continue;
-            }
+                char current = trimmed[i];
 
-            if (char.IsUpper(current))
-            {
-                if (builder.Length > 0 && builder[^1] != '-')
-                    builder.Append('-');
+                if (current is '_' or ' ')
+                {
+                    AppendHyphen(ref builder);
+                    continue;
+                }
+
+                if (char.IsUpper(current))
+                {
+                    if (builder.Length > 0 && builder.AsSpan()[^1] != '-')
+                        builder.Append('-');
+
+                    builder.Append(char.ToLowerInvariant(current));
+                    continue;
+                }
 
                 builder.Append(char.ToLowerInvariant(current));
-                continue;
             }
 
-            builder.Append(char.ToLowerInvariant(current));
+            return builder.ToString().Trim('-');
         }
-
-        return builder.ToString().Trim('-');
+        finally
+        {
+            builder.Dispose();
+        }
     }
 
-    private static void AppendHyphen(StringBuilder builder)
+    private static void AppendHyphen(ref PooledStringBuilder builder)
     {
-        if (builder.Length == 0 || builder[^1] == '-')
+        if (builder.Length == 0 || builder.AsSpan()[^1] == '-')
             return;
 
         builder.Append('-');
