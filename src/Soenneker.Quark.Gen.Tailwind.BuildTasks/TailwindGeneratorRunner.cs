@@ -18,6 +18,7 @@ using Soenneker.Hashing.XxHash;
 
 namespace Soenneker.Quark.Gen.Tailwind.BuildTasks;
 
+/// <inheritdoc cref="ITailwindGeneratorRunner" />
 public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 {
     private const string _tailwindDirName = "tailwind";
