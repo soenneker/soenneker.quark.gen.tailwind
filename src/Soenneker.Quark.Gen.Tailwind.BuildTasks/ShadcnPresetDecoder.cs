@@ -76,12 +76,12 @@ internal static class ShadcnPresetDecoder
 
         code = code.Trim();
         char version = code[0];
-        long bits = FromBase62(code.Substring(1));
+        long bits = FromBase62(code.AsSpan(1));
         if (bits < 0)
             return null;
 
         PresetField[] fields = version == 'a' ? _fieldsV1 : _fieldsV2;
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var values = new Dictionary<string, string>(fields.Length, StringComparer.OrdinalIgnoreCase);
         var offset = 0;
 
         foreach (PresetField field in fields)
@@ -114,7 +114,7 @@ internal static class ShadcnPresetDecoder
         if (string.IsNullOrWhiteSpace(value))
             return false;
 
-        string trimmed = value.Trim();
+        ReadOnlySpan<char> trimmed = value.AsSpan().Trim();
         if (trimmed.Length < 2 || trimmed.Length > 10)
             return false;
 
@@ -130,7 +130,7 @@ internal static class ShadcnPresetDecoder
         return true;
     }
 
-    private static long FromBase62(string value)
+    private static long FromBase62(ReadOnlySpan<char> value)
     {
         long result = 0;
 

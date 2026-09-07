@@ -188,7 +188,7 @@ internal sealed class ShadcnThemeOptions
         return args.TryGetValue(key, out string? value) && HasValue(value) ? value.Trim() : null;
     }
 
-    private static string? First(params string?[] values)
+    private static string? First(params ReadOnlySpan<string?> values)
     {
         foreach (string? value in values)
         {
@@ -225,10 +225,10 @@ internal sealed class ShadcnThemeOptions
 
     internal static string NormalizeVariableName(string key)
     {
-        string trimmed = key.Trim();
+        ReadOnlySpan<char> trimmed = key.AsSpan().Trim();
 
         while (trimmed.StartsWith("--", StringComparison.Ordinal))
-            trimmed = trimmed.Substring(2);
+            trimmed = trimmed.Slice(2);
 
         var builder = new PooledStringBuilder(trimmed.Length + 8);
         try
@@ -255,7 +255,7 @@ internal sealed class ShadcnThemeOptions
                 builder.Append(char.ToLowerInvariant(current));
             }
 
-            return builder.ToString().Trim('-');
+            return builder.AsSpan().Trim('-').ToString();
         }
         finally
         {
