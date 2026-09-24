@@ -18,6 +18,5 @@ public static class Startup
     public static void ConfigureServices(IServiceCollection services)
     {
         services.AddFileUtilAsSingleton().AddDirectoryUtilAsSingleton().AddNodeUtilAsSingleton().AddSingleton<ITailwindGeneratorRunner, TailwindGeneratorRunner>();
-        services.AddHostedService<ConsoleHostedService>();
     }
 }
