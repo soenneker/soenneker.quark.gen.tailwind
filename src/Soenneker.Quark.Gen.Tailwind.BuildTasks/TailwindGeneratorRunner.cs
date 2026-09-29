@@ -333,7 +333,9 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
         AddThemeOptionMetadata(entries, themeOptions);
 
-        string assemblyLocation = GetType().Assembly.Location;
+        string assemblyLocation = System.IO.Path.Combine(AppContext.BaseDirectory, typeof(TailwindGeneratorRunner).Assembly.GetName().Name + ".dll");
+        if (!System.IO.File.Exists(assemblyLocation))
+            assemblyLocation = Environment.ProcessPath ?? string.Empty;
         if (!string.IsNullOrWhiteSpace(assemblyLocation) && await _fileUtil.Exists(assemblyLocation, cancellationToken).NoSync())
         {
             entries.Add(BuildMetadataEntry("buildtasks", assemblyLocation, assemblyLocation));

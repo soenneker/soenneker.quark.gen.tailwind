@@ -85,7 +85,7 @@ internal sealed class ShadcnThemeOptions
                 try
                 {
                     string json = await fileUtil.Read(configPath!, log: false, cancellationToken);
-                    config = JsonSerializer.Deserialize<ShadcnThemeConfig>(json, _jsonOptions);
+                    config = JsonSerializer.Deserialize(json, AotJsonContext.Get<ShadcnThemeOptions.ShadcnThemeConfig>(_jsonOptions));
                     result.ConfigPath = configPath;
                     result.IsConfigured = true;
                 }
@@ -271,7 +271,7 @@ internal sealed class ShadcnThemeOptions
         builder.Append('-');
     }
 
-    private sealed class ShadcnThemeConfig
+    internal sealed class ShadcnThemeConfig
     {
         public string? Css { get; set; }
 
