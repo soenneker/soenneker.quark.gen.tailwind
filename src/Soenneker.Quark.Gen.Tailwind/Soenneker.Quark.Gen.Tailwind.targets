@@ -5,15 +5,18 @@
     </Target>
 
     <PropertyGroup>
+        <!-- Select the SDK host rather than the application's RuntimeIdentifier (for example browser-wasm). -->
+        <TailwindToolRuntimeIdentifier Condition="'$(TailwindToolRuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</TailwindToolRuntimeIdentifier>
+        <_TailwindExecutableName>Soenneker.Quark.Gen.Tailwind.BuildTasks</_TailwindExecutableName>
+        <_TailwindExecutableName Condition="$([System.String]::Copy('$(TailwindToolRuntimeIdentifier)').StartsWith('win-'))">$(_TailwindExecutableName).exe</_TailwindExecutableName>
+        <_TailwindNativePackagePath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../tools/native/$(TailwindToolRuntimeIdentifier)/$(_TailwindExecutableName)'))</_TailwindNativePackagePath>
+        <_TailwindNativeProjectPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../artifacts/native/$(TailwindToolRuntimeIdentifier)/$(_TailwindExecutableName)'))</_TailwindNativeProjectPath>
+        <TailwindBuildTasksExecutablePath Condition="'$(TailwindBuildTasksExecutablePath)' == '' and Exists('$(_TailwindNativePackagePath)')">$(_TailwindNativePackagePath)</TailwindBuildTasksExecutablePath>
+        <TailwindBuildTasksExecutablePath Condition="'$(TailwindBuildTasksExecutablePath)' == ''">$(_TailwindNativeProjectPath)</TailwindBuildTasksExecutablePath>
+
         <!-- Package-scoped names so multiple Soenneker.Quark.Gen.* packages can coexist in one project. -->
         <!-- NuGet package: DLL next to targets or in buildTransitive -->
-        <_TailwindBuildTasksDllFromPackage>$([System.IO.Path]::Combine('$(MSBuildThisFileDirectory)', 'Soenneker.Quark.Gen.Tailwind.BuildTasks.dll'))</_TailwindBuildTasksDllFromPackage>
-        <_TailwindBuildTasksDllFromBuildTransitive>$([System.IO.Path]::GetFullPath($([System.IO.Path]::Combine('$(MSBuildThisFileDirectory)', '..', 'buildTransitive', 'Soenneker.Quark.Gen.Tailwind.BuildTasks.dll'))))</_TailwindBuildTasksDllFromBuildTransitive>
         <!-- ProjectReference: BuildTasks project output (e.g. bin/Debug or bin/Release) -->
-        <_TailwindBuildTasksDllFromProject>$([System.IO.Path]::GetFullPath($([System.IO.Path]::Combine('$(MSBuildThisFileDirectory)', '..', 'Soenneker.Quark.Gen.Tailwind.BuildTasks', 'bin', '$(Configuration)', 'Soenneker.Quark.Gen.Tailwind.BuildTasks.dll'))))</_TailwindBuildTasksDllFromProject>
-        <TailwindBuildTasksDllPath Condition="'$(TailwindBuildTasksDllPath)'=='' and Exists('$(_TailwindBuildTasksDllFromPackage)')">$(_TailwindBuildTasksDllFromPackage)</TailwindBuildTasksDllPath>
-        <TailwindBuildTasksDllPath Condition="'$(TailwindBuildTasksDllPath)'=='' and Exists('$(_TailwindBuildTasksDllFromBuildTransitive)')">$(_TailwindBuildTasksDllFromBuildTransitive)</TailwindBuildTasksDllPath>
-        <TailwindBuildTasksDllPath Condition="'$(TailwindBuildTasksDllPath)'=='' and Exists('$(_TailwindBuildTasksDllFromProject)')">$(_TailwindBuildTasksDllFromProject)</TailwindBuildTasksDllPath>
         <!-- Opt-in: set TailwindGeneratorBuildEnabled=true in projects that should generate quark-tailwind.css (e.g. an app that consumes Soenneker.Quark.Suite). -->
         <TailwindGeneratorBuildEnabled Condition="'$(TailwindGeneratorBuildEnabled)'==''">false</TailwindGeneratorBuildEnabled>
         <!-- ProjectDir with no trailing backslash for reliable Exec quoting. Fallback to MSBuildProjectDirectory when ProjectDir is empty (e.g. when building the package project itself). -->
@@ -49,24 +52,26 @@
     <Target Name="RunTailwindGeneratorBuildTasks"
             AfterTargets="RunQuarkTailwindManifestGeneratorBuildTasks"
             BeforeTargets="Build"
-            Inputs="@(_TailwindGeneratorInputs);$(MSBuildProjectFullPath);$(ProjectAssetsFile);$(TailwindBuildTasksDllPath)"
+            Inputs="@(_TailwindGeneratorInputs);$(MSBuildProjectFullPath);$(ProjectAssetsFile);$(TailwindBuildTasksExecutablePath)"
             Outputs="$(TailwindOutput);$(TailwindMinOutput)"
             Condition="'$(DesignTimeBuild)'!='true' and '$(IsCrossTargetingBuild)'!='true' and '$(TailwindGeneratorBuildEnabled)'=='true'">
 
         <Message Importance="high" Text="Running Soenneker.Quark.Gen.Tailwind BuildTasks: projectDir=$(_TailwindProjectDir)" />
         <Error Condition="'$(_TailwindProjectDir)' == ''"
                Text="Soenneker.Quark.Gen.Tailwind: project directory could not be resolved (ProjectDir and MSBuildProjectDirectory are empty). Set TailwindProjectDir or build a project that has a valid project directory." />
-        <Error Condition="'$(TailwindBuildTasksDllPath)'==''"
-               Text="TailwindBuildTasksDllPath was not resolved. MSBuildThisFileDirectory=$(MSBuildThisFileDirectory)" />
-        <Error Condition="!Exists('$(TailwindBuildTasksDllPath)')"
-               Text="Tailwind BuildTasks DLL not found at '$(TailwindBuildTasksDllPath)'." />
+        <Error Condition="'$(TailwindBuildTasksExecutablePath)'==''"
+               Text="TailwindBuildTasksExecutablePath was not resolved. MSBuildThisFileDirectory=$(MSBuildThisFileDirectory)" />
+        <Error Condition="!Exists('$(TailwindBuildTasksExecutablePath)')"
+               Text="Tailwind native BuildTasks executable not found at '$(TailwindBuildTasksExecutablePath)'." />
 
+        <!-- NuGet extraction does not preserve Unix execute permissions. -->
+        <Exec Condition="'$(OS)' != 'Windows_NT'" Command="chmod +x &quot;$(TailwindBuildTasksExecutablePath)&quot;" />
         <Exec WorkingDirectory="$(_TailwindProjectDir)"
               IgnoreExitCode="false"
               ConsoleToMSBuild="true"
               StandardOutputImportance="high"
               StandardErrorImportance="high"
-              Command='dotnet exec &quot;$(TailwindBuildTasksDllPath)&quot; --projectDir &quot;$(_TailwindProjectDir)&quot;$(_TailwindOutputArg)$(_TailwindManifestArg)$(_ShadcnThemeConfigArg)$(_ShadcnThemeCssFileArg)$(_ShadcnThemeStyleArg)$(_ShadcnThemeBaseColorArg)$(_ShadcnThemeArg)$(_ShadcnThemeColorArg)$(_ShadcnThemeChartColorArg)$(_ShadcnThemeFontArg)$(_ShadcnThemeHeadingFontArg)$(_ShadcnThemeSerifFontArg)$(_ShadcnThemeMonoFontArg)$(_ShadcnThemeRadiusArg)$(_ShadcnThemePresetArg)' />
+              Command='&quot;$(TailwindBuildTasksExecutablePath)&quot; --projectDir &quot;$(_TailwindProjectDir)&quot;$(_TailwindOutputArg)$(_TailwindManifestArg)$(_ShadcnThemeConfigArg)$(_ShadcnThemeCssFileArg)$(_ShadcnThemeStyleArg)$(_ShadcnThemeBaseColorArg)$(_ShadcnThemeArg)$(_ShadcnThemeColorArg)$(_ShadcnThemeChartColorArg)$(_ShadcnThemeFontArg)$(_ShadcnThemeHeadingFontArg)$(_ShadcnThemeSerifFontArg)$(_ShadcnThemeMonoFontArg)$(_ShadcnThemeRadiusArg)$(_ShadcnThemePresetArg)' />
     </Target>
 
     <!-- Copy generated Tailwind CSS to build output (Content pipeline may run before our target). -->

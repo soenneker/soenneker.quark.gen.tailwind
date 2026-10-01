@@ -20,9 +20,14 @@ permissions:
 env:
   PipelineEnvironment: true
   NUGET_XMLDOC_MODE: skip
+  TailwindUsePrebuiltNativeTools: 'true'
 
 jobs:
+  native-tools:
+    uses: ./.github/workflows/native-aot.yml
+
   publish-package:
+    needs: native-tools
     runs-on: ubuntu-latest
 
     steps:
@@ -49,6 +54,12 @@ jobs:
             printf '%s\n' "$notes"
             echo "EOF"
           } >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-*
+          path: artifacts/native
+          merge-multiple: true
 
       - name: Restore build tasks
         run: dotnet restore src/Soenneker.Quark.Gen.Tailwind.BuildTasks/Soenneker.Quark.Gen.Tailwind.BuildTasks.csproj --verbosity minimal
