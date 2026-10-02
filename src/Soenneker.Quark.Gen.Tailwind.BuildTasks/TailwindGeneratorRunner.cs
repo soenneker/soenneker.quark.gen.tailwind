@@ -1,3 +1,5 @@
+using Soenneker.Utils.Json;
+using Soenneker.Extensions.Task;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -21,6 +23,8 @@ namespace Soenneker.Quark.Gen.Tailwind.BuildTasks;
 /// <inheritdoc cref="ITailwindGeneratorRunner" />
 public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 {
+    private static readonly string[] _sourceExtensions = [".cs", ".razor", ".cshtml", ".html"];
+
     private const string _tailwindDirName = "tailwind";
     private const string _inputCssFileName = "input.css";
     private const string _projectManifestFileName = "quark-tailwind-manifest.txt";
@@ -65,17 +69,17 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
         string tailwindDir = Path.Combine(projectDir, _tailwindDirName);
         _logger.LogInformation("Preparing Tailwind working directory at {TailwindDir}.", tailwindDir);
-        await _directoryUtil.Create(tailwindDir, log: false, cancellationToken);
+        await _directoryUtil.Create(tailwindDir, log: false, cancellationToken).NoSync();
 
         string projectManifestPath = Path.Combine(tailwindDir, _projectManifestFileName);
         await EnsureLocalManifestFile(projectManifestPath, null, "# Waiting for local project Tailwind manifest generation." + Environment.NewLine,
-            cancellationToken);
+            cancellationToken).NoSync();
 
         _logger.LogInformation("Resolving upstream suite Tailwind manifest for local copy...");
-        string? suiteManifestPath = await ResolveManifestPath(projectDir, map, cancellationToken);
+        string? suiteManifestPath = await ResolveManifestPath(projectDir, map, cancellationToken).NoSync();
         string localSuiteManifestPath = Path.Combine(tailwindDir, _suiteManifestFileName);
         await EnsureLocalManifestFile(localSuiteManifestPath, suiteManifestPath,
-            "# No upstream Soenneker.Quark.Suite Tailwind manifest was resolved for this project." + Environment.NewLine, cancellationToken);
+            "# No upstream Soenneker.Quark.Suite Tailwind manifest was resolved for this project." + Environment.NewLine, cancellationToken).NoSync();
 
         string inputCss = Path.Combine(tailwindDir, _inputCssFileName);
         string generatedThemeCssPath = Path.Combine(tailwindDir, _generatedThemeFileName);
@@ -86,7 +90,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         bool configuredThemeCss;
 
         bool explicitShadcnConfiguration = HasExplicitShadcnConfiguration(map);
-        bool generatedThemeCssExists = await _fileUtil.Exists(generatedThemeCssPath, cancellationToken);
+        bool generatedThemeCssExists = await _fileUtil.Exists(generatedThemeCssPath, cancellationToken).NoSync();
 
         if (!explicitShadcnConfiguration && generatedThemeCssExists)
         {
@@ -96,31 +100,31 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         }
         else
         {
-            await EnsureDefaultThemeConfig(themeConfigPath, map, cancellationToken);
+            await EnsureDefaultThemeConfig(themeConfigPath, map, cancellationToken).NoSync();
 
             themeOptions = await ShadcnThemeOptions.Load(projectDir, tailwindDir, _themeConfigFileName, map, _fileUtil, _logger,
-                cancellationToken);
-            configuredThemeCss = await EnsureConfiguredThemeCss(generatedThemeCssPath, themeOptions, cancellationToken);
+                cancellationToken).NoSync();
+            configuredThemeCss = await EnsureConfiguredThemeCss(generatedThemeCssPath, themeOptions, cancellationToken).NoSync();
         }
 
-        if (!await _fileUtil.Exists(inputCss, cancellationToken))
+        if (!await _fileUtil.Exists(inputCss, cancellationToken).NoSync())
         {
             _logger.LogInformation("Project Tailwind input.css not found. Creating starter file at {InputCssPath}.", inputCss);
             string projectRootForCss = GetRelativePath(tailwindDir, projectDir);
-            bool generatedThemeExists = await _fileUtil.Exists(generatedThemeCssPath, cancellationToken);
+            bool generatedThemeExists = await _fileUtil.Exists(generatedThemeCssPath, cancellationToken).NoSync();
 
-            await EnsureInputCss(inputCss, projectRootForCss, generatedThemeExists, cancellationToken);
+            await EnsureInputCss(inputCss, projectRootForCss, generatedThemeExists, cancellationToken).NoSync();
         }
         else
         {
             _logger.LogInformation("Using project Tailwind input.css at {InputCssPath}.", inputCss);
 
             if (configuredThemeCss)
-                await EnsureInputCssImportsGeneratedTheme(inputCss, cancellationToken);
+                await EnsureInputCssImportsGeneratedTheme(inputCss, cancellationToken).NoSync();
         }
 
-        await EnsureTailwindConfig(tailwindDir, cancellationToken);
-        await EnsurePackageJson(tailwindDir, cancellationToken);
+        await EnsureTailwindConfig(tailwindDir, cancellationToken).NoSync();
+        await EnsurePackageJson(tailwindDir, cancellationToken).NoSync();
 
         string configPath = Path.Combine(tailwindDir, "tailwind.config.js");
         string packageJsonPath = Path.Combine(tailwindDir, "package.json");
@@ -142,14 +146,14 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         if (!string.IsNullOrEmpty(outputDir))
         {
             _logger.LogInformation("Ensuring Tailwind output directory exists at {OutputDir}.", outputDir);
-            await _directoryUtil.Create(outputDir, log: false, cancellationToken);
+            await _directoryUtil.Create(outputDir, log: false, cancellationToken).NoSync();
         }
 
         string minOutputCssFull = Path.Combine(Path.GetDirectoryName(outputCssFull)!, "quark-tailwind.min.css");
         string inputHash = await ComputeInputHash(projectDir, tailwindDir, projectManifestPath, localSuiteManifestPath, inputCss, generatedThemeCssPath,
-            configPath, packageJsonPath, packageLockPath, themeOptions, cancellationToken);
+            configPath, packageJsonPath, packageLockPath, themeOptions, cancellationToken).NoSync();
 
-        if (await CanSkipGeneration(inputHash, hashPath, outputCssFull, minOutputCssFull, cancellationToken))
+        if (await CanSkipGeneration(inputHash, hashPath, outputCssFull, minOutputCssFull, cancellationToken).NoSync())
         {
             _logger.LogInformation("Tailwind inputs unchanged. Skipping npm install and Tailwind CLI for project {ProjectDir}.", projectDir);
             return 0;
@@ -157,13 +161,13 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
         _logger.LogInformation("Installing Tailwind dependencies in {TailwindDir}.", tailwindDir);
         await _nodeUtil.NpmInstall(tailwindDir, cleanInstall: false, ignoreScripts: true, skipIfUpToDate: true,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).NoSync();
 
         // Pass path relative to tailwind dir so CLI writes to the correct file (avoids Windows absolute-path issues).
         string outputCssForCli = GetRelativePath(tailwindDir, outputCssFull);
 
         _logger.LogInformation("Running Tailwind CLI for full CSS output at {OutputCss}.", outputCssFull);
-        int exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForCli, minify: false, cancellationToken);
+        int exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForCli, minify: false, cancellationToken).NoSync();
         if (exitCode != 0)
         {
             _logger.LogWarning("Tailwind CLI exited with code {ExitCode}. Ensure Node/npx and @tailwindcss/cli are available.", exitCode);
@@ -175,19 +179,19 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         if (!string.IsNullOrEmpty(outputDirForMin))
         {
             _logger.LogInformation("Ensuring Tailwind minified output directory exists at {OutputDir}.", outputDirForMin);
-            await _directoryUtil.Create(outputDirForMin, log: false, cancellationToken);
+            await _directoryUtil.Create(outputDirForMin, log: false, cancellationToken).NoSync();
         }
 
         string outputCssForMin = GetRelativePath(tailwindDir, minOutputCssFull);
         _logger.LogInformation("Running Tailwind CLI for minified CSS output at {MinOutputCss}.", minOutputCssFull);
-        exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForMin, minify: true, cancellationToken);
+        exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForMin, minify: true, cancellationToken).NoSync();
         if (exitCode != 0)
         {
             _logger.LogError("Tailwind CLI could not produce the minified CSS output; exit code {ExitCode}.", exitCode);
             return exitCode;
         }
 
-        await _fileUtil.Write(hashPath, inputHash, log: false, cancellationToken);
+        await _fileUtil.Write(hashPath, inputHash, log: false, cancellationToken).NoSync();
         _logger.LogInformation("Completed Tailwind generation for project {ProjectDir}.", projectDir);
         return 0;
     }
@@ -197,19 +201,19 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         if (args.TryGetValue("--shadcnThemeConfig", out string? explicitConfigPath) && !string.IsNullOrWhiteSpace(explicitConfigPath))
             return;
 
-        if (await _fileUtil.Exists(themeConfigPath, cancellationToken))
+        if (await _fileUtil.Exists(themeConfigPath, cancellationToken).NoSync())
             return;
 
-        await _fileUtil.Write(themeConfigPath, _defaultThemeConfigJson + Environment.NewLine, log: false, cancellationToken);
+        await _fileUtil.Write(themeConfigPath, _defaultThemeConfigJson + Environment.NewLine, log: false, cancellationToken).NoSync();
         _logger.LogInformation("Created default shadcn theme config at {ThemeConfigPath}.", themeConfigPath);
     }
 
     private async ValueTask<bool> CanSkipGeneration(string inputHash, string hashPath, string outputCssPath, string minOutputCssPath,
         CancellationToken cancellationToken)
     {
-        bool hasOutput = await _fileUtil.Exists(outputCssPath, cancellationToken);
-        bool hasMinOutput = await _fileUtil.Exists(minOutputCssPath, cancellationToken);
-        bool hasHash = await _fileUtil.Exists(hashPath, cancellationToken);
+        bool hasOutput = await _fileUtil.Exists(outputCssPath, cancellationToken).NoSync();
+        bool hasMinOutput = await _fileUtil.Exists(minOutputCssPath, cancellationToken).NoSync();
+        bool hasHash = await _fileUtil.Exists(hashPath, cancellationToken).NoSync();
 
         if (!hasOutput || !hasMinOutput || !hasHash)
         {
@@ -218,7 +222,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             return false;
         }
 
-        string? previousHash = await _fileUtil.TryRead(hashPath, log: false, cancellationToken);
+        string? previousHash = await _fileUtil.TryRead(hashPath, log: false, cancellationToken).NoSync();
         bool isMatch = string.Equals(previousHash?.Trim(), inputHash, StringComparison.Ordinal);
 
         if (!isMatch)
@@ -247,7 +251,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             if (!await _fileUtil.Exists(themeOptions.CssFilePath!, cancellationToken).NoSync())
                 throw new FileNotFoundException("shadcn theme CSS file was configured but not found.", themeOptions.CssFilePath);
 
-            css = await _fileUtil.Read(themeOptions.CssFilePath!, log: false, cancellationToken);
+            css = await _fileUtil.Read(themeOptions.CssFilePath!, log: false, cancellationToken).NoSync();
         }
         else
         {
@@ -257,13 +261,13 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         if (string.IsNullOrWhiteSpace(css))
             throw new InvalidOperationException("shadcn theme configuration produced no CSS.");
 
-        return await WriteThemeCss(generatedThemeCssPath, css, "Configured shadcn theme CSS", cancellationToken);
+        return await WriteThemeCss(generatedThemeCssPath, css, "Configured shadcn theme CSS", cancellationToken).NoSync();
     }
 
     private async ValueTask<bool> WriteThemeCss(string generatedThemeCssPath, string css, string sourceDescription, CancellationToken cancellationToken)
     {
         string normalizedCss = css.TrimEnd() + Environment.NewLine;
-        string? existing = await _fileUtil.TryRead(generatedThemeCssPath, log: false, cancellationToken);
+        string? existing = await _fileUtil.TryRead(generatedThemeCssPath, log: false, cancellationToken).NoSync();
 
         if (string.Equals(existing, normalizedCss, StringComparison.Ordinal))
         {
@@ -275,14 +279,14 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         if (!string.IsNullOrWhiteSpace(outputDir))
             await _directoryUtil.Create(outputDir, log: false, cancellationToken).NoSync();
 
-        await _fileUtil.Write(generatedThemeCssPath, normalizedCss, log: false, cancellationToken);
+        await _fileUtil.Write(generatedThemeCssPath, normalizedCss, log: false, cancellationToken).NoSync();
         _logger.LogInformation("Wrote {SourceDescription} to {ThemeCssPath}.", sourceDescription, generatedThemeCssPath);
         return true;
     }
 
     private async ValueTask EnsureInputCssImportsGeneratedTheme(string inputCssPath, CancellationToken cancellationToken)
     {
-        string contents = await _fileUtil.Read(inputCssPath, log: false, cancellationToken);
+        string contents = await _fileUtil.Read(inputCssPath, log: false, cancellationToken).NoSync();
 
         if (contents.Contains(_generatedThemeFileName, StringComparison.OrdinalIgnoreCase))
             return;
@@ -294,7 +298,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             if (contents.Contains(fallbackThemeBlock, StringComparison.Ordinal))
             {
                 string updated = contents.Replace(fallbackThemeBlock, importBlock, StringComparison.Ordinal);
-                await _fileUtil.Write(inputCssPath, updated, log: false, cancellationToken);
+                await _fileUtil.Write(inputCssPath, updated, log: false, cancellationToken).NoSync();
                 _logger.LogInformation("Updated Tailwind input.css to import configured theme CSS.");
                 return;
             }
@@ -312,24 +316,21 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     {
         var entries = new List<string>();
 
-        await AddSourceMetadataEntries(entries, projectDir, ".cs", cancellationToken);
-        await AddSourceMetadataEntries(entries, projectDir, ".razor", cancellationToken);
-        await AddSourceMetadataEntries(entries, projectDir, ".cshtml", cancellationToken);
-        await AddSourceMetadataEntries(entries, projectDir, ".html", cancellationToken);
+        AddSourceMetadataEntries(entries, projectDir, cancellationToken);
 
-        await AddSpecificFileContent(entries, tailwindDir, projectManifestPath, "manifest-project", cancellationToken);
-        await AddSpecificFileContent(entries, tailwindDir, localSuiteManifestPath, "manifest-suite", cancellationToken);
-        await AddSpecificFileContent(entries, tailwindDir, inputCssPath, "input-css", cancellationToken);
-        await AddSpecificFileContent(entries, tailwindDir, generatedThemeCssPath, "generated-theme", cancellationToken);
-        await AddSpecificFileContent(entries, tailwindDir, configPath, "tailwind-config", cancellationToken);
-        await AddSpecificFileContent(entries, tailwindDir, packageJsonPath, "package-json", cancellationToken);
-        await AddSpecificFileContent(entries, tailwindDir, packageLockPath, "package-lock", cancellationToken);
+        await AddSpecificFileContent(entries, tailwindDir, projectManifestPath, "manifest-project", cancellationToken).NoSync();
+        await AddSpecificFileContent(entries, tailwindDir, localSuiteManifestPath, "manifest-suite", cancellationToken).NoSync();
+        await AddSpecificFileContent(entries, tailwindDir, inputCssPath, "input-css", cancellationToken).NoSync();
+        await AddSpecificFileContent(entries, tailwindDir, generatedThemeCssPath, "generated-theme", cancellationToken).NoSync();
+        await AddSpecificFileContent(entries, tailwindDir, configPath, "tailwind-config", cancellationToken).NoSync();
+        await AddSpecificFileContent(entries, tailwindDir, packageJsonPath, "package-json", cancellationToken).NoSync();
+        await AddSpecificFileContent(entries, tailwindDir, packageLockPath, "package-lock", cancellationToken).NoSync();
 
         if (!string.IsNullOrWhiteSpace(themeOptions.ConfigPath))
-            await AddSpecificFileContent(entries, projectDir, themeOptions.ConfigPath!, "theme-config", cancellationToken);
+            await AddSpecificFileContent(entries, projectDir, themeOptions.ConfigPath!, "theme-config", cancellationToken).NoSync();
 
         if (!string.IsNullOrWhiteSpace(themeOptions.CssFilePath))
-            await AddSpecificFileContent(entries, projectDir, themeOptions.CssFilePath!, "theme-css-file", cancellationToken);
+            await AddSpecificFileContent(entries, projectDir, themeOptions.CssFilePath!, "theme-css-file", cancellationToken).NoSync();
 
         AddThemeOptionMetadata(entries, themeOptions);
 
@@ -347,18 +348,25 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         return XxHash3Util.Hash(manifest);
     }
 
-    private async ValueTask AddSourceMetadataEntries(List<string> entries, string projectDir, string extension, CancellationToken cancellationToken)
+    private static void AddSourceMetadataEntries(List<string> entries, string projectDir, CancellationToken cancellationToken)
     {
-        var files = new List<string>(ProjectFileEnumerator.EnumerateByExtension(projectDir, extension, cancellationToken));
-
-        foreach (string file in files)
+        foreach ((string file, long length, long lastWriteTimeTicks) in ProjectFileEnumerator.EnumerateMetadata(projectDir, _sourceExtensions, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             if (IsExcludedSourcePath(file))
                 continue;
 
-            entries.Add(BuildMetadataEntry(projectDir, file, extension));
+            ReadOnlySpan<char> extension = Path.GetExtension(file.AsSpan());
+            foreach (string sourceExtension in _sourceExtensions)
+            {
+                if (!extension.Equals(sourceExtension, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string relativePath = Path.GetRelativePath(projectDir, file).Replace('\\', '/');
+                entries.Add($"{sourceExtension}|{relativePath}|{length}|{lastWriteTimeTicks}");
+                break;
+            }
         }
     }
 
@@ -367,7 +375,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         if (!await _fileUtil.Exists(filePath, cancellationToken).NoSync())
             return;
 
-        string content = await _fileUtil.Read(filePath, log: false, cancellationToken);
+        string content = await _fileUtil.Read(filePath, log: false, cancellationToken).NoSync();
         string relativePath = Path.GetRelativePath(rootDir, filePath).Replace('\\', '/');
         entries.Add($"{category}|{relativePath}|{XxHash3Util.Hash(content)}");
     }
@@ -402,7 +410,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
 
     private static void AddThemeDictionaryEntries(List<string> entries, string category, IReadOnlyDictionary<string, string> values)
     {
-        foreach ((string key, string value) in values.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+        foreach ((string key, string value) in values)
         {
             if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
                 continue;
@@ -437,14 +445,14 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         if (args.TryGetValue("--manifestPath", out string? explicitManifestPath) && !string.IsNullOrWhiteSpace(explicitManifestPath))
         {
             string fullPath = Path.GetFullPath(explicitManifestPath.Trim().Trim('"'));
-            return await _fileUtil.Exists(fullPath, cancellationToken) ? fullPath : null;
+            return await _fileUtil.Exists(fullPath, cancellationToken).NoSync() ? fullPath : null;
         }
 
-        string? projectReferenceManifest = await TryResolveManifestFromProjectReferences(projectDir, cancellationToken);
+        string? projectReferenceManifest = await TryResolveManifestFromProjectReferences(projectDir, cancellationToken).NoSync();
         if (!string.IsNullOrWhiteSpace(projectReferenceManifest))
             return projectReferenceManifest;
 
-        string? packageManifest = await TryResolveManifestFromPackages(projectDir, cancellationToken);
+        string? packageManifest = await TryResolveManifestFromPackages(projectDir, cancellationToken).NoSync();
         if (!string.IsNullOrWhiteSpace(packageManifest))
             return packageManifest;
 
@@ -463,10 +471,10 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                 return;
             }
 
-            if (await _fileUtil.Exists(normalizedSourcePath, cancellationToken))
+            if (await _fileUtil.Exists(normalizedSourcePath, cancellationToken).NoSync())
             {
-                string sourceContents = await _fileUtil.Read(normalizedSourcePath, log: false, cancellationToken);
-                string? existingContents = await _fileUtil.TryRead(destinationPath, log: false, cancellationToken);
+                string sourceContents = await _fileUtil.Read(normalizedSourcePath, log: false, cancellationToken).NoSync();
+                string? existingContents = await _fileUtil.TryRead(destinationPath, log: false, cancellationToken).NoSync();
 
                 if (string.Equals(existingContents, sourceContents, StringComparison.Ordinal))
                 {
@@ -474,16 +482,16 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                     return;
                 }
 
-                await _fileUtil.Write(destinationPath, sourceContents, log: false, cancellationToken);
+                await _fileUtil.Write(destinationPath, sourceContents, log: false, cancellationToken).NoSync();
                 _logger.LogInformation("Copied Tailwind manifest from {SourcePath} to {DestinationPath}.", normalizedSourcePath, destinationPath);
                 return;
             }
         }
 
-        if (await _fileUtil.Exists(destinationPath, cancellationToken))
+        if (await _fileUtil.Exists(destinationPath, cancellationToken).NoSync())
             return;
 
-        await _fileUtil.Write(destinationPath, placeholderContents, log: false, cancellationToken);
+        await _fileUtil.Write(destinationPath, placeholderContents, log: false, cancellationToken).NoSync();
         _logger.LogInformation("Created placeholder Tailwind manifest at {ManifestPath}.", destinationPath);
     }
 
@@ -496,7 +504,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         XDocument document;
         try
         {
-            string xml = await _fileUtil.Read(projectFilePath, log: false, cancellationToken);
+            string xml = await _fileUtil.Read(projectFilePath, log: false, cancellationToken).NoSync();
             document = XDocument.Parse(xml, LoadOptions.None);
         }
         catch (Exception ex)
@@ -521,11 +529,11 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                 continue;
 
             string manifestPath = Path.Combine(referenceDirectory, _tailwindDirName, _suiteManifestFileName);
-            if (await _fileUtil.Exists(manifestPath, cancellationToken))
+            if (await _fileUtil.Exists(manifestPath, cancellationToken).NoSync())
                 return manifestPath;
 
             string legacyManifestPath = Path.Combine(referenceDirectory, _tailwindDirName, _legacyInlineGeneratedTxtFileName);
-            if (await _fileUtil.Exists(legacyManifestPath, cancellationToken))
+            if (await _fileUtil.Exists(legacyManifestPath, cancellationToken).NoSync())
                 return legacyManifestPath;
         }
 
@@ -535,13 +543,14 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
     private async Task<string?> TryResolveManifestFromPackages(string projectDir, CancellationToken cancellationToken)
     {
         string assetsPath = Path.Combine(projectDir, "obj", "project.assets.json");
-        if (!await _fileUtil.Exists(assetsPath, cancellationToken))
+        if (!await _fileUtil.Exists(assetsPath, cancellationToken).NoSync())
             return null;
 
         try
         {
-            string assetsJson = await _fileUtil.Read(assetsPath, log: false, cancellationToken);
-            using JsonDocument document = JsonDocument.Parse(assetsJson);
+            string assetsJson = await _fileUtil.Read(assetsPath, log: false, cancellationToken).NoSync();
+            using JsonDocument document = JsonUtil.Deserialize(assetsJson, AotJsonContext.Default.JsonDocument)
+                ?? throw new JsonException("The project assets JSON is empty.");
 
             if (!document.RootElement.TryGetProperty("libraries", out JsonElement libraries) ||
                 !document.RootElement.TryGetProperty("packageFolders", out JsonElement packageFolders))
@@ -570,17 +579,17 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
                 {
                     string packageManifestPath = Path.Combine(folder, _suitePackageId, version, _tailwindDirName, _suiteManifestFileName);
 
-                    if (await _fileUtil.Exists(packageManifestPath, cancellationToken))
+                    if (await _fileUtil.Exists(packageManifestPath, cancellationToken).NoSync())
                         return packageManifestPath;
 
                     string contentFilesManifestPath = Path.Combine(folder, _suitePackageId, version, "contentFiles", "any", "any", "tailwind",
                         _suiteManifestFileName);
 
-                    if (await _fileUtil.Exists(contentFilesManifestPath, cancellationToken))
+                    if (await _fileUtil.Exists(contentFilesManifestPath, cancellationToken).NoSync())
                         return contentFilesManifestPath;
 
                     string legacyManifestPath = Path.Combine(folder, _suitePackageId, version, _tailwindDirName, _legacyInlineGeneratedTxtFileName);
-                    if (await _fileUtil.Exists(legacyManifestPath, cancellationToken))
+                    if (await _fileUtil.Exists(legacyManifestPath, cancellationToken).NoSync())
                         return legacyManifestPath;
                 }
             }
@@ -641,7 +650,7 @@ __QUARK_THEME_BLOCK____QUARK_MANIFEST_SOURCES__/* Scan project sources from the 
                            .Replace("__QUARK_PROJECT_ROOT__", escapedProjectRoot, StringComparison.Ordinal);
 
         // Tailwind v4 syntax (v3 @tailwind directives are deprecated and can cause no output or errors).
-        await _fileUtil.Write(inputCssPath, contents, true, cancellationToken);
+        await _fileUtil.Write(inputCssPath, contents, true, cancellationToken).NoSync();
     }
 
     private static IEnumerable<string> GetKnownFallbackThemeBlocks()
@@ -770,7 +779,7 @@ __QUARK_THEME_BLOCK____QUARK_MANIFEST_SOURCES__/* Scan project sources from the 
     private async ValueTask EnsureTailwindConfig(string tailwindDir, CancellationToken cancellationToken)
     {
         string path = Path.Combine(tailwindDir, "tailwind.config.js");
-        if (await _fileUtil.Exists(path, cancellationToken))
+        if (await _fileUtil.Exists(path, cancellationToken).NoSync())
             return;
 
         const string content = @"/** @type {import('tailwindcss').Config} */
@@ -779,13 +788,13 @@ module.exports = {
   plugins: []
 };
 ";
-        await _fileUtil.Write(path, content, log: false, cancellationToken);
+        await _fileUtil.Write(path, content, log: false, cancellationToken).NoSync();
     }
 
     private async Task EnsurePackageJson(string tailwindDir, CancellationToken cancellationToken)
     {
         string path = Path.Combine(tailwindDir, "package.json");
-        if (await _fileUtil.Exists(path, cancellationToken))
+        if (await _fileUtil.Exists(path, cancellationToken).NoSync())
             return;
 
         const string content = @"{
@@ -798,14 +807,14 @@ module.exports = {
   }
 }
 ";
-        await _fileUtil.Write(path, content, log: false, cancellationToken);
+        await _fileUtil.Write(path, content, log: false, cancellationToken).NoSync();
     }
 
     private async Task<int> RunTailwindCli(string workingDir, string configPath, string inputCss, string outputCssArg, bool minify,
         CancellationToken cancellationToken)
     {
         string inputFileName = Path.GetFileName(inputCss);
-        bool hasConfig = await _fileUtil.Exists(configPath, cancellationToken);
+        bool hasConfig = await _fileUtil.Exists(configPath, cancellationToken).NoSync();
         string? configFileName = hasConfig ? Path.GetFileName(configPath) : null;
 
         var argList = new List<string> { "--no-install", "@tailwindcss/cli" };
@@ -822,7 +831,7 @@ module.exports = {
         if (minify)
             argList.Add("--minify");
 
-        string npxPath = await _nodeUtil.GetNpxPath(cancellationToken);
+        string npxPath = await _nodeUtil.GetNpxPath(cancellationToken).NoSync();
         var psi = new ProcessStartInfo
         {
             FileName = npxPath,
@@ -846,7 +855,7 @@ module.exports = {
         }
         catch (Exception e)
         {
-            await Console.Error.WriteLineAsync($"Failed to start Tailwind CLI: {e.Message}. Ensure Node is installed.");
+            await Console.Error.WriteLineAsync($"Failed to start Tailwind CLI: {e.Message}. Ensure Node is installed.").NoSync();
             return 1;
         }
 
@@ -857,9 +866,9 @@ module.exports = {
         {
             try
             {
-                int exit = await tcs.Task;
-                string stdout = await outTask;
-                string stderr = await errTask;
+                int exit = await tcs.Task.NoSync();
+                string stdout = await outTask.NoSync();
+                string stderr = await errTask.NoSync();
                 if (!string.IsNullOrEmpty(stdout))
                     _logger.LogInformation("{TailwindStdout}", stdout.TrimEnd());
                 if (!string.IsNullOrEmpty(stderr))

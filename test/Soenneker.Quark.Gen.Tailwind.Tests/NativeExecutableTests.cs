@@ -1,3 +1,5 @@
+using Soenneker.Extensions.ValueTask;
+using Soenneker.Extensions.Task;
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
@@ -13,7 +15,7 @@ public sealed class NativeExecutableTests
         if (string.IsNullOrEmpty(executable)) { TUnit.Core.Skip.Test("Set QUARK_NATIVE_TOOL to run native integration tests."); return; }
         using var process = Process.Start(new ProcessStartInfo(executable) { UseShellExecute = false })
             ?? throw new Exception("Native tool could not start.");
-        await process.WaitForExitAsync();
+        await process.WaitForExitAsync().NoSync();
         if (process.ExitCode != 1) throw new Exception("Expected missing project arguments to fail with exit code 1.");
     }
 }

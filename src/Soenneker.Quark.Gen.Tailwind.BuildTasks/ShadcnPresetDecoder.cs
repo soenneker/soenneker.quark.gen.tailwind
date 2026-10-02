@@ -146,7 +146,4 @@ internal static class ShadcnPresetDecoder
         return result;
     }
 
-    private readonly record struct PresetField(string Key, string[] Values, int Bits);
 }
-
-internal sealed record ShadcnPresetConfig(string Style, string BaseColor, string Theme, string ChartColor, string Font, string FontHeading, string Radius);

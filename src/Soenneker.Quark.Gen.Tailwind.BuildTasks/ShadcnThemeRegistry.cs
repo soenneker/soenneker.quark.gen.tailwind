@@ -1045,16 +1045,3 @@ internal static class ShadcnThemeRegistry
 
     public static bool TryGetTheme(string name, out ShadcnTheme? theme) => _themes.TryGetValue(name, out theme);
 }
-
-internal sealed class ShadcnTheme
-{
-    public ShadcnTheme(IReadOnlyDictionary<string, string> light, IReadOnlyDictionary<string, string> dark)
-    {
-        Light = light;
-        Dark = dark;
-    }
-
-    public IReadOnlyDictionary<string, string> Light { get; }
-
-    public IReadOnlyDictionary<string, string> Dark { get; }
-}

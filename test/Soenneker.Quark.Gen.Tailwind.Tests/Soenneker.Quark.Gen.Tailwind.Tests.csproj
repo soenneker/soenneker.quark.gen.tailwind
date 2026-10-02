@@ -14,5 +14,8 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Soenneker.Quark.Gen.Tailwind\Soenneker.Quark.Gen.Tailwind.csproj" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../../src/Soenneker.Quark.Gen.Tailwind.BuildTasks/ProjectFileEnumerator.cs" Link="ProjectFileEnumerator.cs" />
+    </ItemGroup>
 </Project>
 

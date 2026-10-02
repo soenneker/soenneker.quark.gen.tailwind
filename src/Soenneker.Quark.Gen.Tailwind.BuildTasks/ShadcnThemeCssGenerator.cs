@@ -321,7 +321,7 @@ internal static class ShadcnThemeCssGenerator
             return null;
 
         string normalized = NormalizeName(value, string.Empty);
-        return _fontDefinitions.TryGetValue(normalized, out FontDefinition? definition) ? definition : null;
+        return _fontDefinitions.GetValueOrDefault(normalized);
     }
 
     private static string TrimCssVariablePrefix(string value) => value.StartsWith("--", StringComparison.Ordinal) ? value.Substring(2) : value;
@@ -395,8 +395,4 @@ internal static class ShadcnThemeCssGenerator
 
     private static string CssString(string value) => "\"" + value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
 
-    private sealed record ThemeSelection(string BaseColor, string ThemeName, string ChartColor, ShadcnTheme BaseTheme, ShadcnTheme Theme,
-        ShadcnTheme ChartTheme);
-
-    private sealed record FontDefinition(string Family, string Variable);
 }

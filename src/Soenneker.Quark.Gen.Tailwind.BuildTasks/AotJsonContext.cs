@@ -5,7 +5,8 @@ using System.Text.Json.Serialization.Metadata;
 
 namespace Soenneker.Quark.Gen.Tailwind.BuildTasks;
 
-[JsonSerializable(typeof(ShadcnThemeOptions.ShadcnThemeConfig))]
+[JsonSerializable(typeof(ShadcnThemeConfig))]
+[JsonSerializable(typeof(JsonDocument))]
 internal partial class AotJsonContext : JsonSerializerContext
 {
     internal static JsonTypeInfo<T> Get<T>(JsonSerializerOptions? options = null) =>
