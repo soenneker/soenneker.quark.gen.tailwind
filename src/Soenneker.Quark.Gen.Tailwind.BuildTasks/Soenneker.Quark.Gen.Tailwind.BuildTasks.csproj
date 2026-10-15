@@ -18,7 +18,7 @@
         <PackageReference Include="Soenneker.Node.Util" Version="4.0.367" />
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="Soenneker.Extensions.ValueTask" Version="4.0.132" />
+        <PackageReference Include="Soenneker.Extensions.ValueTask" Version="4.0.133" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Soenneker.Utils.Json" Version="4.0.2753" />
