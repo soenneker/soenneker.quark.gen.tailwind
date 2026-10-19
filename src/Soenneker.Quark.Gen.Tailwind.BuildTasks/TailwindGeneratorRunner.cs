@@ -159,6 +159,7 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
             return 0;
         }
 
+        string? lockBeforeInstall = File.Exists(packageLockPath) ? await File.ReadAllTextAsync(packageLockPath, cancellationToken).NoSync() : null;
         _logger.LogInformation("Installing Tailwind dependencies in {TailwindDir}.", tailwindDir);
         await _nodeUtil.NpmInstall(tailwindDir, cleanInstall: false, ignoreScripts: true, skipIfUpToDate: true,
             cancellationToken: cancellationToken).NoSync();
@@ -183,14 +184,19 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         }
 
         string outputCssForMin = GetRelativePath(tailwindDir, minOutputCssFull);
-        _logger.LogInformation("Running Tailwind CLI for minified CSS output at {MinOutputCss}.", minOutputCssFull);
-        exitCode = await RunTailwindCli(tailwindDir, configPath, inputCss, outputCssForMin, minify: true, cancellationToken).NoSync();
+        _logger.LogInformation("Minifying compiled Tailwind CSS at {MinOutputCss}.", minOutputCssFull);
+        exitCode = await RunTailwindCli(tailwindDir, configPath, outputCssFull, outputCssForMin, minify: true, cancellationToken).NoSync();
         if (exitCode != 0)
         {
-            _logger.LogError("Tailwind CLI could not produce the minified CSS output; exit code {ExitCode}.", exitCode);
+            _logger.LogError("Tailwind optimizer could not produce the minified CSS output; exit code {ExitCode}.", exitCode);
             return exitCode;
         }
 
+        // Rescan only when installation changed the dependency inputs.
+        string? lockAfterInstall = File.Exists(packageLockPath) ? await File.ReadAllTextAsync(packageLockPath, cancellationToken).NoSync() : null;
+        if (!string.Equals(lockBeforeInstall, lockAfterInstall, StringComparison.Ordinal))
+            inputHash = await ComputeInputHash(projectDir, tailwindDir, projectManifestPath, localSuiteManifestPath, inputCss, generatedThemeCssPath,
+                configPath, packageJsonPath, packageLockPath, themeOptions, cancellationToken).NoSync();
         await _fileUtil.Write(hashPath, inputHash, log: false, cancellationToken).NoSync();
         _logger.LogInformation("Completed Tailwind generation for project {ProjectDir}.", projectDir);
         return 0;
@@ -829,9 +835,13 @@ module.exports = {
         argList.Add("-o");
         argList.Add(outputCssArg);
         if (minify)
-            argList.Add("--minify");
+        {
+            // Use the same optimizer as the installed CLI without compiling/scanning sources again.
+            const string script = "const fs=require('node:fs');const {createRequire}=require('node:module');const cli=createRequire(require.resolve('@tailwindcss/cli/package.json'));const {optimize}=cli('@tailwindcss/node');const input=process.argv[1];fs.writeFileSync(process.argv[2],optimize(fs.readFileSync(input,'utf8'),{file:input,minify:true}).code);";
+            argList = ["-e", script, inputCss, outputCssArg];
+        }
 
-        string npxPath = await _nodeUtil.GetNpxPath(cancellationToken).NoSync();
+        string npxPath = minify ? await _nodeUtil.GetNodePath("node", cancellationToken).NoSync() : await _nodeUtil.GetNpxPath(cancellationToken).NoSync();
         var psi = new ProcessStartInfo
         {
             FileName = npxPath,
