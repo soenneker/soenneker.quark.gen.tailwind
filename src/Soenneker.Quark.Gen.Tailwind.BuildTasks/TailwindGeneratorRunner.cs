@@ -526,10 +526,16 @@ public sealed class TailwindGeneratorRunner : ITailwindGeneratorRunner
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (string.IsNullOrWhiteSpace(include))
+            // Raw project XML may contain inactive, property-based references. Treating
+            // an unresolved include as a filename points back at the consumer directory
+            // and can select its stale copied manifest instead of the restored package.
+            if (string.IsNullOrWhiteSpace(include) || include.Contains("$(", StringComparison.Ordinal))
                 continue;
 
             string referencePath = Path.GetFullPath(Path.Combine(projectDir, include));
+            if (!await _fileUtil.Exists(referencePath, cancellationToken).NoSync())
+                continue;
+
             string? referenceDirectory = Path.GetDirectoryName(referencePath);
             if (referenceDirectory.IsNullOrWhiteSpace())
                 continue;
