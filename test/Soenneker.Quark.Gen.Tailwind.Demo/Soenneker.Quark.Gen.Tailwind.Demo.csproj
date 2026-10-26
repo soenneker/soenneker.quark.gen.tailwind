@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
@@ -20,19 +20,18 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.13" />
-        <!--<PackageReference Include="Soenneker.Quark.Gen.Themes" Version="4.0.8">
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="11.0.0-rc.3.26522.148" />
+        <!--<PackageReference Include="Soenneker.Quark.Gen.Themes" Version="4.0.293">
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>-->
-        <!--<PackageReference Include="Soenneker.Quark.Suite" Version="4.0.436" />-->
+        <!--<PackageReference Include="Soenneker.Quark.Suite" Version="11.0.1611" />-->
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\..\..\soenneker.quark.suite\src\Soenneker.Quark.Suite\Soenneker.Quark.Suite.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.Components" Version="10.0.13" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
+        <PackageReference Include="Microsoft.AspNetCore.Components" Version="11.0.0-rc.3.26522.148" />
     </ItemGroup>
 </Project>
