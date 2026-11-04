@@ -820,8 +820,8 @@ module.exports = {
   ""name"": ""quark-tailwind"",
   ""private"": true,
   ""devDependencies"": {
-    ""@tailwindcss/cli"": ""^4.2.2"",
-    ""tailwindcss"": ""^4.2.1"",
+    ""@tailwindcss/cli"": ""^4.3.4"",
+    ""tailwindcss"": ""^4.3.4"",
     ""tw-animate-css"": ""^1.4.0""
   }
 }
